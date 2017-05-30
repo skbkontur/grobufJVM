@@ -86,3 +86,31 @@ internal inline fun<reified T1, reified T2, reified R> MethodVisitor.call2(opcod
 
 internal inline fun<reified T1, reified T2, reified T3, reified R> MethodVisitor.call3(opcode: Int, owner: String, name: String) =
         call(opcode, owner, name, listOf(T1::class.java, T2::class.java, T3::class.java), R::class.java)
+
+internal fun MethodVisitor.ctorCall(owner: String, argumentTypes: List<Class<*>>) =
+        call(Opcodes.INVOKESPECIAL, owner, "<init>", argumentTypes, Void::class.java)
+
+internal fun MethodVisitor.ctorCall0(owner: String) = ctorCall(owner, emptyList())
+
+internal inline fun<reified T1> MethodVisitor.ctorCall1(owner: String) = ctorCall(owner, listOf(T1::class.java))
+
+internal inline fun<reified T1, reified T2> MethodVisitor.ctorCall2(owner: String) =
+        ctorCall(owner, listOf(T1::class.java, T2::class.java))
+
+internal inline fun<reified T1, reified T2, reified T3> MethodVisitor.ctorCall3(owner: String) =
+        ctorCall(owner, listOf(T1::class.java, T2::class.java, T3::class.java))
+
+internal fun MethodVisitor.callVirtual(owner: String, name: String, argumentTypes: List<Class<*>>, returnType: Class<*>) =
+        call(Opcodes.INVOKEVIRTUAL, owner, name, argumentTypes, returnType)
+
+internal inline fun<reified R> MethodVisitor.callVirtual0(owner: String, name: String) =
+        callVirtual(owner, name, emptyList(), R::class.java)
+
+internal inline fun<reified T1, reified R> MethodVisitor.callVirtual1(owner: String, name: String) =
+        callVirtual(owner, name, listOf(T1::class.java), R::class.java)
+
+internal inline fun<reified T1, reified T2, reified R> MethodVisitor.callVirtual2(owner: String, name: String) =
+        callVirtual(owner, name, listOf(T1::class.java, T2::class.java), R::class.java)
+
+internal inline fun<reified T1, reified T2, reified T3, reified R> MethodVisitor.callVirtual3(owner: String, name: String) =
+        callVirtual(owner, name, listOf(T1::class.java, T2::class.java, T3::class.java), R::class.java)
