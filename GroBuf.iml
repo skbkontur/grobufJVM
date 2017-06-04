@@ -8,6 +8,6 @@
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="library" name="KotlinJavaRuntime" level="project" />
-    <orderEntry type="library" name="asm-debug-all-6.0_ALPHA" level="project" />
+    <orderEntry type="library" name="asm-debug-all-5.2" level="project" />
   </component>
 </module>
