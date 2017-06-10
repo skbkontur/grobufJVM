@@ -37,7 +37,7 @@ internal class ClassSerializerBuilder(fragmentSerializerCollection: FragmentSeri
             callVirtual(fieldSerializerType, "countSize",
                     listOf(WriteContext::class.java, it.type), Int::class.java) // stack: [size, fieldSerializer.countSize(context, obj.field)]
             visitInsn(Opcodes.IADD)                                             // stack: [size + fieldSerializer.countSize(context, obj.field) => size]
-            visitLdcInsn(8)                                                     // stack: [size, 8]
+            visitLdcInsn(8 /* hashCode */)                                      // stack: [size, 8]
             visitInsn(Opcodes.IADD)                                             // stack: [size + 8 => size]
             visitLabel(fieldVisitedLabel)
         }

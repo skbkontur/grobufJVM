@@ -52,9 +52,9 @@ fun zzz8(x: Double) : Any { return x }
 
 data class A(/*@JvmField val b: B?, */@JvmField var x: Int, @JvmField var y: Int, @JvmField var s: String?)
 
-class B(@JvmField var a: A, @JvmField var x: Int)
+class B(@JvmField var a: A, @JvmField var x: Int, @JvmField var z: ZZ)
 
-class B2(@JvmField var a: A?, @JvmField var x: Int)
+class B2(@JvmField var a: A?, @JvmField var x: Int, @JvmField var z: ZZ)
 
 fun countSize(x: Any?, context: WriteContext) {
 
@@ -70,20 +70,23 @@ inline fun <reified T> zzz() {
     zzz(T::class)
 }
 
+enum class ZZ {
+    X,
+    Y
+}
+
 fun main(args: Array<String>) {
-    Qzz::class.java.fields.forEach {
-        val clazz = it.type
-        println(clazz)
-        val kClass = clazz.kotlin
-        println(kClass)
-        println(kClass.java)
+    println(kotlin.Enum::class.java)
+    println(java.lang.Enum::class.java)
+    ZZ::class.java.enumConstants.forEach { it: ZZ ->
+        println(it)
     }
     zzz(Int::class)
     zzz<Int>()
     val fragmentSerializerCollection = FragmentSerializerCollection()
     val serializer = fragmentSerializerCollection.getFragmentSerializer<B>()
     val context = WriteContext()
-    val obj = B(A(42, 117, "zzz"), -1)
+    val obj = B(A(42, 117, "zzz"), -1, ZZ.Y)
     val size = serializer.countSize(context, obj)
     println(size)
     val arr = ByteArray(size)
@@ -94,6 +97,7 @@ fun main(args: Array<String>) {
     val serializer2 = fragmentSerializerCollection.getFragmentSerializer<B2>()
     val readB2 = serializer2.read(ReadContext().also { it.data = arr; it.index = 0 })
     println(readB2.x)
+    println(readB2.z)
     println(readB2.a!!.x)
     println(readB2.a!!.y)
     println(readB2.a!!.s)

@@ -67,6 +67,9 @@ internal class FragmentSerializerCollection {
         klass.jvmType.isBox ->
             BoxesSerializerBuilder(this, klass)
 
+        klass.isEnum ->
+            EnumSerializerBuilder(this, klass)
+
         else -> ClassSerializerBuilder(this, klass)
     }
 
