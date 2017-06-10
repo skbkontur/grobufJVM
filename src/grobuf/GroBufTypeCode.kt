@@ -48,23 +48,31 @@ enum class GroBufTypeCode(val value: Byte, val length: Int) {
 }
 
 private val groBufTypeCodeMap = mapOf(
-        Byte::class.java to GroBufTypeCode.Int8,
-        Short::class.java to GroBufTypeCode.Int16,
-        Int::class.java to GroBufTypeCode.Int32,
-        Long::class.java to GroBufTypeCode.Int64,
-        Char::class.java to GroBufTypeCode.UInt16,
-        Boolean::class.java to GroBufTypeCode.Boolean,
-        Float::class.java to GroBufTypeCode.Single,
-        Double::class.java to GroBufTypeCode.Double,
-        ByteArray::class.java to GroBufTypeCode.Int8Array,
-        ShortArray::class.java to GroBufTypeCode.Int16Array,
-        IntArray::class.java to GroBufTypeCode.Int32Array,
-        LongArray::class.java to GroBufTypeCode.Int64Array,
-        CharArray::class.java to GroBufTypeCode.UInt16Array,
-        BooleanArray::class.java to GroBufTypeCode.BooleanArray,
-        FloatArray::class.java to GroBufTypeCode.SingleArray,
-        DoubleArray::class.java to GroBufTypeCode.DoubleArray,
-        String::class.java to GroBufTypeCode.String
+        Byte::class.java                to GroBufTypeCode.Int8,
+        java.lang.Byte::class.java      to GroBufTypeCode.Int8,
+        Short::class.java               to GroBufTypeCode.Int16,
+        java.lang.Short::class.java     to GroBufTypeCode.Int16,
+        Int::class.java                 to GroBufTypeCode.Int32,
+        java.lang.Integer::class.java   to GroBufTypeCode.Int32,
+        Long::class.java                to GroBufTypeCode.Int64,
+        java.lang.Long::class.java      to GroBufTypeCode.Int64,
+        Char::class.java                to GroBufTypeCode.UInt16,
+        java.lang.Character::class.java to GroBufTypeCode.UInt16,
+        Boolean::class.java             to GroBufTypeCode.Boolean,
+        java.lang.Boolean::class.java   to GroBufTypeCode.Boolean,
+        Float::class.java               to GroBufTypeCode.Single,
+        java.lang.Float::class.java     to GroBufTypeCode.Single,
+        Double::class.java              to GroBufTypeCode.Double,
+        java.lang.Double::class.java    to GroBufTypeCode.Double,
+        ByteArray::class.java           to GroBufTypeCode.Int8Array,
+        ShortArray::class.java          to GroBufTypeCode.Int16Array,
+        IntArray::class.java            to GroBufTypeCode.Int32Array,
+        LongArray::class.java           to GroBufTypeCode.Int64Array,
+        CharArray::class.java           to GroBufTypeCode.UInt16Array,
+        BooleanArray::class.java        to GroBufTypeCode.BooleanArray,
+        FloatArray::class.java          to GroBufTypeCode.SingleArray,
+        DoubleArray::class.java         to GroBufTypeCode.DoubleArray,
+        String::class.java              to GroBufTypeCode.String
 )
 
 internal val Class<*>.groBufTypeCode: GroBufTypeCode

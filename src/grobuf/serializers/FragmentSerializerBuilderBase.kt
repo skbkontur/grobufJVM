@@ -53,37 +53,42 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
         visitFieldInsn(Opcodes.PUTFIELD, T::class.jvmType.name, "index", Int::class.jvmType.signature)
     }
 
+    private val JVMPrimitive.writeSafeMethodName get() = "write${javaName.capitalize()}Safe"
+    private val JVMPrimitive.writeUnsafeMethodName get() = "write${javaName.capitalize()}Unsafe"
+
     protected fun MethodVisitor.writeSafe(klass: Class<*>, valueLoader: MethodVisitor.() -> Unit) {
         val jvmPrimitive = klass.jvmPrimitiveType ?: error("Expected a primitive but was $klass")
         loadThis()                                                                       // stack: [this]
         loadResult()                                                                     // stack: [this, result]
         loadIndex<WriteContext>()                                                        // stack: [this, result, index]
         valueLoader()                                                                    // stack: [this, result, index, value]
-        callVirtual(classType, "write${jvmPrimitive.name}Safe",
+        callVirtual(classType, jvmPrimitive.writeSafeMethodName,
                 listOf(ByteArray::class.java, Int::class.java, klass), Void::class.java) // this.write<type>Safe(result, index, value); stack: []
         increaseIndexBy<WriteContext>(jvmPrimitive.size)                                 // index += type.size; stack: []
     }
 
     protected inline fun <reified T> MethodVisitor.writeSafe(noinline valueLoader: MethodVisitor.() -> Unit) {
         val jvmPrimitive = T::class.jvmPrimitiveType ?: error("Expected a primitive but was ${T::class}")
-        loadThis()                                                                        // stack: [this]
-        loadResult()                                                                      // stack: [this, result]
-        loadIndex<WriteContext>()                                                         // stack: [this, result, index]
-        valueLoader()                                                                     // stack: [this, result, index, value]
-        callVirtual3<ByteArray, Int, T, Void>(classType, "write${jvmPrimitive.name}Safe") // this.write<type>Safe(result, index, value); stack: []
-        increaseIndexBy<WriteContext>(jvmPrimitive.size)                                  // index += type.size; stack: []
+        loadThis()                                                                         // stack: [this]
+        loadResult()                                                                       // stack: [this, result]
+        loadIndex<WriteContext>()                                                          // stack: [this, result, index]
+        valueLoader()                                                                      // stack: [this, result, index, value]
+        callVirtual3<ByteArray, Int, T, Void>(classType, jvmPrimitive.writeSafeMethodName) // this.write<type>Safe(result, index, value); stack: []
+        increaseIndexBy<WriteContext>(jvmPrimitive.size)                                   // index += type.size; stack: []
     }
 
     protected fun MethodVisitor.writeLength(startSlot: Int) {
-        loadThis()                                                               // stack: [this]
-        loadResult()                                                             // stack: [this, result]
-        loadSlot<Int>(startSlot)                                                 // stack: [this, result, start]
-        loadIndex<WriteContext>()                                                // stack: [this, result, start, index]
-        loadSlot<Int>(startSlot)                                                 // stack: [this, result, start, index, start]
-        visitLdcInsn(4)                                                          // stack: [this, result, start, index, start, 4]
-        visitInsn(Opcodes.IADD)                                                  // stack: [this, result, start, index, start + 4]
-        visitInsn(Opcodes.ISUB)                                                  // stack: [this, result, start, index - start - 4 => length]
-        callVirtual3<ByteArray, Int, Int, Void>(classType, "writeIntUnsafe")     // this.writeIntUnsafe(result, start, length); stack: []
+        loadThis()                                         // stack: [this]
+        loadResult()                                       // stack: [this, result]
+        loadSlot<Int>(startSlot)                           // stack: [this, result, start]
+        loadIndex<WriteContext>()                          // stack: [this, result, start, index]
+        loadSlot<Int>(startSlot)                           // stack: [this, result, start, index, start]
+        visitLdcInsn(4)                                    // stack: [this, result, start, index, start, 4]
+        visitInsn(Opcodes.IADD)                            // stack: [this, result, start, index, start + 4]
+        visitInsn(Opcodes.ISUB)                            // stack: [this, result, start, index - start - 4 => length]
+        callVirtual3<ByteArray, Int, Int, Void>(classType,
+                JVMPrimitive.INT.writeUnsafeMethodName)    // this.writeIntUnsafe(result, start, length); stack: []
+
     }
 
     private fun buildCountMethod() {
@@ -149,23 +154,25 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
         visitFieldInsn(Opcodes.GETFIELD, ReadContext::class.jvmType.name, "data", ByteArray::class.jvmType.signature)
     }
 
+    private val JVMPrimitive.readSafeMethodName get() = "read${javaName.capitalize()}Safe"
+
     protected fun MethodVisitor.readSafe(klass: Class<*>) {
         val jvmPrimitive = klass.jvmPrimitiveType ?: error("Expected a primitive but was $klass")
         loadThis()                                                     // stack: [this]
         loadData()                                                     // stack: [this, data]
         loadIndex<ReadContext>()                                       // stack: [this, data, index]
-        callVirtual(classType, "read${jvmPrimitive.name}Safe",
+        callVirtual(classType, jvmPrimitive.readSafeMethodName,
                 listOf(ByteArray::class.java, Int::class.java), klass) // stack: [this.read<type>Safe(result, index)]
         increaseIndexBy<ReadContext>(jvmPrimitive.size)                // index += type.size; stack: [this.read<type>Safe(result, index)]
     }
 
     protected inline fun <reified T> MethodVisitor.readSafe() {
         val jvmPrimitive = T::class.jvmPrimitiveType ?: error("Expected a primitive but was ${T::class}")
-        loadThis()                                                                 // stack: [this]
-        loadData()                                                                 // stack: [this, data]
-        loadIndex<ReadContext>()                                                   // stack: [this, data, index]
-        callVirtual2<ByteArray, Int, T>(classType, "read${jvmPrimitive.name}Safe") // stack: [this.read<type>Safe(result, index)]
-        increaseIndexBy<ReadContext>(jvmPrimitive.size)                            // index += type.size; stack: [this.read<type>Safe(result, index)]
+        loadThis()                                                                  // stack: [this]
+        loadData()                                                                  // stack: [this, data]
+        loadIndex<ReadContext>()                                                    // stack: [this, data, index]
+        callVirtual2<ByteArray, Int, T>(classType, jvmPrimitive.readSafeMethodName) // stack: [this.read<type>Safe(result, index)]
+        increaseIndexBy<ReadContext>(jvmPrimitive.size)                             // index += type.size; stack: [this.read<type>Safe(result, index)]
     }
 
     protected fun MethodVisitor.loadTypeCode() {
@@ -174,14 +181,14 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
 
     protected fun MethodVisitor.loadDefault(klass: Class<*>) {
         when (klass.jvmPrimitiveType) {
-            JVMPrimitive.Byte,
-            JVMPrimitive.Short,
-            JVMPrimitive.Int,
-            JVMPrimitive.Char,
-            JVMPrimitive.Boolean -> visitLdcInsn(0)
-            JVMPrimitive.Long -> visitLdcInsn(0L)
-            JVMPrimitive.Float -> visitLdcInsn(0.0f)
-            JVMPrimitive.Double -> visitLdcInsn(0.0)
+            JVMPrimitive.BYTE,
+            JVMPrimitive.SHORT,
+            JVMPrimitive.INT,
+            JVMPrimitive.CHAR,
+            JVMPrimitive.BOOLEAN -> visitLdcInsn(0)
+            JVMPrimitive.LONG -> visitLdcInsn(0L)
+            JVMPrimitive.FLOAT -> visitLdcInsn(0.0f)
+            JVMPrimitive.DOUBLE -> visitLdcInsn(0.0)
             else -> visitInsn(Opcodes.ACONST_NULL)
         }
     }

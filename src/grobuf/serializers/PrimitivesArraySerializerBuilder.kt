@@ -20,6 +20,8 @@ internal class PrimitivesArraySerializerBuilder(fragmentSerializerCollection: Fr
         visitMaxs(3, 3)
     }
 
+    private val JVMPrimitive.writeArraySafeMethodName get() = "write${javaName.capitalize()}ArraySafe"
+
     override fun MethodVisitor.writeNotNull() {
         writeSafe<Byte> { visitLdcInsn(klass.groBufTypeCode.value) }                     // this.writeByteSafe(result, index, typeCode]; stack: []
 
@@ -35,13 +37,15 @@ internal class PrimitivesArraySerializerBuilder(fragmentSerializerCollection: Fr
         loadResult()                                                                     // stack: [this, result]
         loadIndex<WriteContext>()                                                        // stack: [this, result, index]
         loadObj()                                                                        // stack: [this, result, index, obj]
-        callVirtual(classType, "write${elementJvmPrimitiveType}ArraySafe",
+        callVirtual(classType, elementJvmPrimitiveType.writeArraySafeMethodName,
                 listOf(ByteArray::class.java, Int::class.java, klass), Void::class.java) // this.writeArray(result, index, obj); stack: []
         increaseIndexBy<WriteContext> { loadSlot<Int>(lengthSlot) }                      // index += length; stack: []
 
         ret<Void>()
         visitMaxs(4, 4)
     }
+
+    private val JVMPrimitive.readArraySafeMethodName get() = "read${javaName.capitalize()}ArraySafe"
 
     override fun MethodVisitor.readNotNull() {
         assertTypeCode(klass.groBufTypeCode)
@@ -59,7 +63,7 @@ internal class PrimitivesArraySerializerBuilder(fragmentSerializerCollection: Fr
         loadSlot<Any>(resultSlot)                                                        // stack: [this, result]
         loadIndex<ReadContext>()                                                         // stack: [this, result, index]
         loadData()                                                                       // stack: [this, result, index, data]
-        callVirtual(classType, "read${elementJvmPrimitiveType}ArraySafe",
+        callVirtual(classType, elementJvmPrimitiveType.readArraySafeMethodName,
                 listOf(klass, Int::class.java, ByteArray::class.java), Void::class.java) // this.readArray(result, index, obj); stack: []
         increaseIndexBy<ReadContext> { loadSlot<Int>(lengthSlot) }                       // index += length; stack: []
 

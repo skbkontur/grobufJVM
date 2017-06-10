@@ -10,34 +10,36 @@ internal fun MethodVisitor.castObjectTo(type: JVMType) {
     if (type !is JVMType.Primitive) {
         visitTypeInsn(Opcodes.CHECKCAST, type.name)
     } else {
-        val box = type.box ?: throw IllegalStateException("Cast to void is not allowed")
-        visitTypeInsn(Opcodes.CHECKCAST, box.type.name)
+        val boxType = type.jvmPrimitive.boxType
+                ?: throw IllegalStateException("Cast to void is not allowed")
+        visitTypeInsn(Opcodes.CHECKCAST, boxType.name)
         // Unbox value.
-        callVirtual(box.type, box.unboxMethodName,
+        callVirtual(boxType, type.jvmPrimitive.unboxMethodName,
                 emptyList(), type)
     }
 }
 
 internal fun MethodVisitor.castToObject(type: JVMType) {
     if (type is JVMType.Primitive) {
-        val box = type.box ?: throw IllegalStateException("Cast from void is not allowed")
+        val boxType = type.jvmPrimitive.boxType
+                ?: throw IllegalStateException("Cast from void is not allowed")
         // Box value.
-        call(Opcodes.INVOKESTATIC, box.type, box.boxMethodName,
-                listOf(type), box.type)
+        call(Opcodes.INVOKESTATIC, boxType, type.jvmPrimitive.boxMethodName,
+                listOf(type), boxType)
     }
 }
 
 private fun MethodVisitor.ret(jvmPrimitive: JVMPrimitive?) {
     val opcode = when (jvmPrimitive) {
-        JVMPrimitive.Byte,
-        JVMPrimitive.Short,
-        JVMPrimitive.Char,
-        JVMPrimitive.Int,
-        JVMPrimitive.Boolean -> Opcodes.IRETURN
-        JVMPrimitive.Long-> Opcodes.LRETURN
-        JVMPrimitive.Float -> Opcodes.FRETURN
-        JVMPrimitive.Double -> Opcodes.DRETURN
-        JVMPrimitive.Void -> Opcodes.RETURN
+        JVMPrimitive.BYTE,
+        JVMPrimitive.SHORT,
+        JVMPrimitive.CHAR,
+        JVMPrimitive.INT,
+        JVMPrimitive.BOOLEAN -> Opcodes.IRETURN
+        JVMPrimitive.LONG -> Opcodes.LRETURN
+        JVMPrimitive.FLOAT -> Opcodes.FRETURN
+        JVMPrimitive.DOUBLE -> Opcodes.DRETURN
+        JVMPrimitive.VOID -> Opcodes.RETURN
         else -> Opcodes.ARETURN
     }
     visitInsn(opcode)
@@ -49,14 +51,14 @@ internal inline fun<reified T> MethodVisitor.ret() = ret(T::class.jvmPrimitiveTy
 
 private fun MethodVisitor.loadSlot(jvmPrimitive: JVMPrimitive?, index: Int) {
     val opcode = when (jvmPrimitive) {
-        JVMPrimitive.Byte,
-        JVMPrimitive.Short,
-        JVMPrimitive.Char,
-        JVMPrimitive.Int,
-        JVMPrimitive.Boolean -> Opcodes.ILOAD
-        JVMPrimitive.Long -> Opcodes.LLOAD
-        JVMPrimitive.Float -> Opcodes.FLOAD
-        JVMPrimitive.Double -> Opcodes.DLOAD
+        JVMPrimitive.BYTE,
+        JVMPrimitive.SHORT,
+        JVMPrimitive.CHAR,
+        JVMPrimitive.INT,
+        JVMPrimitive.BOOLEAN -> Opcodes.ILOAD
+        JVMPrimitive.LONG -> Opcodes.LLOAD
+        JVMPrimitive.FLOAT -> Opcodes.FLOAD
+        JVMPrimitive.DOUBLE -> Opcodes.DLOAD
         else -> Opcodes.ALOAD
     }
     visitVarInsn(opcode, index)
@@ -68,14 +70,14 @@ internal inline fun<reified T> MethodVisitor.loadSlot(index: Int) = loadSlot(T::
 
 private fun MethodVisitor.saveToSlot(jvmPrimitive: JVMPrimitive?, index: Int) {
     val opcode = when (jvmPrimitive) {
-        JVMPrimitive.Byte,
-        JVMPrimitive.Short,
-        JVMPrimitive.Char,
-        JVMPrimitive.Int,
-        JVMPrimitive.Boolean -> Opcodes.ISTORE
-        JVMPrimitive.Long -> Opcodes.LSTORE
-        JVMPrimitive.Float -> Opcodes.FSTORE
-        JVMPrimitive.Double -> Opcodes.DSTORE
+        JVMPrimitive.BYTE,
+        JVMPrimitive.SHORT,
+        JVMPrimitive.CHAR,
+        JVMPrimitive.INT,
+        JVMPrimitive.BOOLEAN -> Opcodes.ISTORE
+        JVMPrimitive.LONG -> Opcodes.LSTORE
+        JVMPrimitive.FLOAT -> Opcodes.FSTORE
+        JVMPrimitive.DOUBLE -> Opcodes.DSTORE
         else -> Opcodes.ASTORE
     }
     visitVarInsn(opcode, index)
