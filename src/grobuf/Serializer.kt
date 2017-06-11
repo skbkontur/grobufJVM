@@ -249,6 +249,8 @@ internal abstract class FragmentSerializer<T> {
         context.index += length
     }
 
+    protected fun throwBadDataLengthError(): Nothing = throw Error("Bad data length")
+
     //------------Write unsafe------------------------------------------------------------------//
 
     protected fun writeByteUnsafe(array: ByteArray, offset: Int, value: Byte) {
@@ -675,8 +677,11 @@ internal class FragmentSerializerCollection {
         klass.jvmPrimitiveType != null ->
             PrimitivesSerializerBuilder(this, klass)
 
-        klass.isArray && klass.componentType.jvmPrimitiveType != null ->
-            PrimitivesArraySerializerBuilder(this, klass)
+        klass.isArray ->
+            if (klass.componentType.jvmPrimitiveType != null)
+                PrimitivesArraySerializerBuilder(this, klass)
+            else
+                ArraySerializerBuilder(this, klass)
 
         else -> ClassSerializerBuilder(this, klass)
     }
@@ -787,6 +792,18 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
         valueLoader()                                                                     // stack: [this, result, index, value]
         callVirtual3<ByteArray, Int, T, Void>(className, "write${jvmPrimitive.name}Safe") // this.write<type>Safe(result, index, value); stack: []
         increaseIndexBy<WriteContext>(jvmPrimitive.size)                                  // index += type.size; stack: []
+    }
+
+    protected fun MethodVisitor.writeLength(startSlot: Int) {
+        loadThis()                                                               // stack: [this]
+        loadResult()                                                             // stack: [this, result]
+        loadSlot<Int>(startSlot)                                                 // stack: [this, result, start]
+        loadIndex<WriteContext>()                                                // stack: [this, result, start, index]
+        loadSlot<Int>(startSlot)                                                 // stack: [this, result, start, index, start]
+        visitLdcInsn(4)                                                          // stack: [this, result, start, index, start, 4]
+        visitInsn(Opcodes.IADD)                                                  // stack: [this, result, start, index, start + 4]
+        visitInsn(Opcodes.ISUB)                                                  // stack: [this, result, start, index - start - 4 => length]
+        callVirtual3<ByteArray, Int, Int, Void>(className, "writeIntUnsafe")     // this.writeIntUnsafe(result, start, length); stack: []
     }
 
     private fun buildCountMethod() {
@@ -1061,6 +1078,148 @@ internal class PrimitivesArraySerializerBuilder(fragmentSerializerCollection: Fr
     }
 }
 
+internal class ArraySerializerBuilder(fragmentSerializerCollection: FragmentSerializerCollection, klass: Class<*>)
+    : FragmentSerializerBuilderBase(fragmentSerializerCollection, klass) {
+
+    private val elementType = klass.componentType!!
+    private val elementSerializerType = fragmentSerializerCollection.getFragmentSerializerType(elementType)
+    private val elementSerializerField = defineField("elementSerializer", elementSerializerType, null, true)
+
+    override fun MethodVisitor.countSizeNotNull() {
+        visitLdcInsn(1 /* typeCode */ + 4 /* data length */ + 4 /* array length */) // stack: [9 => size]
+        loadObj()                                                                   // stack: [size, obj]
+        visitInsn(Opcodes.ARRAYLENGTH)                                              // stack: [size, obj.length]
+        visitInsn(Opcodes.DUP)                                                      // stack: [size, obj.length, obj.length]
+        val lengthSlot = 3
+        saveToSlot<Int>(lengthSlot)                                                 // length = obj.length; stack: [size, length]
+        val doneLabel = Label()
+        visitJumpInsn(Opcodes.IFEQ, doneLabel)                                      // if (length == 0) goto done; stack: [size]
+
+        val indexSlot = 4
+        visitLdcInsn(0)                                                             // stack: [size, 0]
+        saveToSlot<Int>(indexSlot)                                                  // index = 0; stack: [size]
+        val loopStartLabel = Label()
+        visitLabel(loopStartLabel)
+        loadField(elementSerializerField)                                           // stack: [size, elementSerializer]
+        loadContext()                                                               // stack: [size, elementSerializer, context]
+        loadObj()                                                                   // stack: [size, elementSerializer, context, obj]
+        loadSlot<Int>(indexSlot)                                                    // stack: [size, elementSerializer, context, obj, index]
+        visitInsn(Opcodes.AALOAD)                                                   // stack: [size, elementSerializer, context, obj[index]]
+        callVirtual(elementSerializerType, "countSize",
+                listOf(WriteContext::class.java, elementType), Int::class.java)     // stack: [size, elementSerializer.countSize(context, obj[index])]
+        visitInsn(Opcodes.IADD)                                                     // stack: [size + elementSerializer.countSize(context, obj[index]) => size]
+
+        loadSlot<Int>(indexSlot)                                                    // stack: [size, index]
+        visitLdcInsn(1)                                                             // stack: [size, index, 1]
+        visitInsn(Opcodes.IADD)                                                     // stack: [size, index + 1]
+        visitInsn(Opcodes.DUP)                                                      // stack: [size, index + 1, index + 1]
+        saveToSlot<Int>(indexSlot)                                                  // index = index + 1; stack: [size, index]
+        loadSlot<Int>(lengthSlot)                                                   // stack: [size, index, length]
+        visitJumpInsn(Opcodes.IF_ICMPLT, loopStartLabel)                            // if (index < length) goto loopStart; stack: [size]
+
+        visitLabel(doneLabel)
+        ret<Int>()                                                                  // return size; stack: []
+        visitMaxs(5, 5)
+    }
+
+    override fun MethodVisitor.writeNotNull() {
+        writeSafe<Byte> { visitLdcInsn(GroBufTypeCode.Array.value) }
+
+        val startSlot = 3
+        loadIndex<WriteContext>()                                                   // stack: [context.index]
+        saveToSlot<Int>(startSlot)                                                  // start = context.index; stack: []
+        increaseIndexBy<WriteContext>(4)                                            // context.index += 4; stack: []
+
+        loadObj()                                                                   // stack: [obj]
+        visitInsn(Opcodes.ARRAYLENGTH)                                              // stack: [obj.length]
+        visitInsn(Opcodes.DUP)                                                      // stack: [obj.length, obj.length]
+        val lengthSlot = 4
+        saveToSlot<Int>(lengthSlot)                                                 // length = obj.length; stack: [length]
+        writeSafe<Int> { loadSlot<Int>(lengthSlot) }                                // writeIntSafe(length); stack: [length]
+        val doneLabel = Label()
+        visitJumpInsn(Opcodes.IFEQ, doneLabel)                                      // if (length == 0) goto done; stack: []
+
+        val indexSlot = 5
+        visitLdcInsn(0)                                                             // stack: [0]
+        saveToSlot<Int>(indexSlot)                                                  // index = 0; stack: []
+        val loopStartLabel = Label()
+        visitLabel(loopStartLabel)
+        loadField(elementSerializerField)                                           // stack: [elementSerializer]
+        loadContext()                                                               // stack: [elementSerializer, context]
+        loadObj()                                                                   // stack: [elementSerializer, context, obj]
+        loadSlot<Int>(indexSlot)                                                    // stack: [elementSerializer, context, obj, index]
+        visitInsn(Opcodes.AALOAD)                                                   // stack: [elementSerializer, context, obj[index]]
+        callVirtual(elementSerializerType, "write",
+                listOf(WriteContext::class.java, elementType), Void::class.java)    // elementSerializer.write(context, obj[index]); stack: []
+
+        loadSlot<Int>(indexSlot)                                                    // stack: [index]
+        visitLdcInsn(1)                                                             // stack: [index, 1]
+        visitInsn(Opcodes.IADD)                                                     // stack: [index + 1]
+        visitInsn(Opcodes.DUP)                                                      // stack: [index + 1, index + 1]
+        saveToSlot<Int>(indexSlot)                                                  // index = index + 1; stack: [index]
+        loadSlot<Int>(lengthSlot)                                                   // stack: [index, length]
+        visitJumpInsn(Opcodes.IF_ICMPLT, loopStartLabel)                            // if (index < length) goto loopStart; stack: []
+
+        visitLabel(doneLabel)
+        writeLength(startSlot)
+        ret<Void>()
+        visitMaxs(6, 6)
+    }
+
+    override fun MethodVisitor.readNotNull() {
+        assertTypeCode(GroBufTypeCode.Array)
+
+        readSafe<Int>()                                         // stack: [data length]
+        loadIndex<ReadContext>()                                // stack: [data length, context.index]
+        val endSlot = 3
+        visitInsn(Opcodes.IADD)                                 // stack: [data length + context.index]
+        saveToSlot<Int>(endSlot)                                // end = context.index + data length; stack: []
+        readSafe<Int>()                                         // stack: [length]
+        val lengthSlot = 4
+        visitInsn(Opcodes.DUP)                                  // stack: [length, length]
+        saveToSlot<Int>(lengthSlot)                             // stack: [length]
+        visitTypeInsn(Opcodes.ANEWARRAY, elementType.jvmType)   // stack: [new elementType[length] => result]
+        loadSlot<Int>(lengthSlot)
+        val doneLabel = Label()
+        visitJumpInsn(Opcodes.IFEQ, doneLabel)                  // if (length == 0) goto done; stack: [result]
+
+        val indexSlot = 5
+        visitLdcInsn(0)                                         // stack: [result, 0]
+        saveToSlot<Int>(indexSlot)                              // index = 0; stack: [result]
+        val loopStartLabel = Label()
+        visitLabel(loopStartLabel)
+        visitInsn(Opcodes.DUP)                                  // stack: [result, result]
+        loadSlot<Int>(indexSlot)                                // stack: [result, result, index]
+        loadField(elementSerializerField)                       // stack: [result, result, index, elementSerializer]
+        loadContext()                                           // stack: [result, result, index, elementSerializer, context]
+        callVirtual(elementSerializerType, "read",
+                listOf(ReadContext::class.java), elementType)   // stack: [result, result, index, elementSerializer.read(context)]
+        visitInsn(Opcodes.AASTORE)                              // result[index] = elementSerializer.read(context); stack: [result]
+
+        loadSlot<Int>(indexSlot)                                // stack: [result, index]
+        visitLdcInsn(1)                                         // stack: [result, index, 1]
+        visitInsn(Opcodes.IADD)                                 // stack: [result, index + 1]
+        visitInsn(Opcodes.DUP)                                  // stack: [result, index + 1, index + 1]
+        saveToSlot<Int>(indexSlot)                              // index = index + 1; stack: [result, index]
+        loadSlot<Int>(lengthSlot)                               // stack: [result, index, length]
+        visitJumpInsn(Opcodes.IF_ICMPLT, loopStartLabel)        // if (index < length) goto loopStart; stack: [result]
+
+        visitLabel(doneLabel)
+        loadSlot<Int>(endSlot)                                  // stack: [result, end]
+        loadIndex<ReadContext>()                                // stack: [result, end, context.index]
+        val badDataLabel = Label()
+        visitJumpInsn(Opcodes.IF_ICMPNE, badDataLabel)          // if (end != context.index) goto badData; stack: [result]
+        ret(klass)
+
+        visitLabel(badDataLabel)
+        loadThis()
+        callVirtual0<Void>(className, "throwBadDataLengthError")
+        ret(klass)
+
+        visitMaxs(5, 6)
+    }
+}
+
 internal class ClassSerializerBuilder(fragmentSerializerCollection: FragmentSerializerCollection, klass: Class<*>)
     : FragmentSerializerBuilderBase(fragmentSerializerCollection, klass) {
 
@@ -1133,15 +1292,7 @@ internal class ClassSerializerBuilder(fragmentSerializerCollection: FragmentSeri
             visitLabel(fieldVisitedLabel)
         }
 
-        loadThis()                                                               // stack: [this]
-        loadResult()                                                             // stack: [this, result]
-        loadSlot<Int>(startSlot)                                                 // stack: [this, result, start]
-        loadIndex<WriteContext>()                                                // stack: [this, result, start, index]
-        loadSlot<Int>(startSlot)                                                 // stack: [this, result, start, index, start]
-        visitLdcInsn(4)                                                          // stack: [this, result, start, index, start, 4]
-        visitInsn(Opcodes.IADD)                                                  // stack: [this, result, start, index, start + 4]
-        visitInsn(Opcodes.ISUB)                                                  // stack: [this, result, start, index - start - 4 => length]
-        callVirtual3<ByteArray, Int, Int, Void>(className, "writeIntUnsafe")     // this.writeIntUnsafe(result, start, length); stack: []
+        writeLength(startSlot)
 
         ret<Void>()
         visitMaxs(6, 5)
@@ -1204,7 +1355,17 @@ internal class ClassSerializerBuilder(fragmentSerializerCollection: FragmentSeri
         loadIndex<ReadContext>()                                     // stack: [result, index]
         loadSlot<Int>(endSlot)                                       // stack: [result, index, end]
         visitJumpInsn(Opcodes.IF_ICMPLT, loopStartLabel)             // if (index < end) goto loopStart; stack: [result]
-        ret(klass)                                                   // return result; stack: []
+
+        loadSlot<Int>(endSlot)                                       // stack: [result, end]
+        loadIndex<ReadContext>()                                     // stack: [result, end, context.index]
+        val badDataLabel = Label()
+        visitJumpInsn(Opcodes.IF_ICMPNE, badDataLabel)               // if (end != context.index) goto badData; stack: [result]
+        ret(klass)
+
+        visitLabel(badDataLabel)
+        loadThis()
+        callVirtual0<Void>(className, "throwBadDataLengthError")
+        ret(klass)
 
         visitLabel(emptyLabel)                                       // stack: [result, 0]
         visitInsn(Opcodes.POP)                                       // stack: [result]
@@ -1234,7 +1395,7 @@ fun zzz6(x: Long) : Any { return x }
 fun zzz7(x: Float) : Any { return x }
 fun zzz8(x: Double) : Any { return x }
 
-class A(/*@JvmField val b: B?, */@JvmField var x: Int, @JvmField var y: Int)
+data class A(/*@JvmField val b: B?, */@JvmField var x: Int, @JvmField var y: Int)
 
 class B(@JvmField var a: A, @JvmField var x: Int)
 
@@ -1289,6 +1450,17 @@ fun main(args: Array<String>) {
     println(arr3.contentToString())
     val readArr = serializer3.read(ReadContext().also { it.data = arr3; it.index = 0 })
     println(readArr.contentToString())
+
+    val serializer4 = fragmentSerializerCollection.getFragmentSerializer<Array<A>>()
+    val size4 = serializer4.countSize(context, arrayOf(A(42, 117), A(-1, 314)))
+    val arr4 = ByteArray(size4)
+    context.index = 0
+    context.result = arr4
+    serializer4.write(context, arrayOf(A(42, 117), A(-1, 314)))
+    println(arr4.contentToString())
+    val readArr4 = serializer4.read(ReadContext().also { it.data = arr4; it.index = 0 })
+    println(readArr4.contentToString())
+
 }
 
 class Z(val x: Int)

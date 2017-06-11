@@ -30,7 +30,7 @@ internal enum class JVMPrimitive(val shortName: String, val size: kotlin.Int, va
 
 internal val primitiveSignatures = enumValues<JVMPrimitive>().map { it.shortName }.toSet()
 
-internal fun String.toJVMIdentifier() = replace('/', '_').replace('.', '_').replace("[", "Arr")
+internal fun String.toJVMIdentifier() = replace('/', '_').replace('.', '_').replace(';', '_').replace("[", "Arr")
 internal fun String.toJVMType() = replace('.', '/')
 internal fun String.toJVMSignature() = toJVMType().also {
     if (primitiveSignatures.contains(it))
@@ -66,7 +66,7 @@ internal val KClass<*>.jvmPrimitiveType get() = when (this) {
 
 internal val Class<*>.jvmType: String get() {
     return if (this.isArray)
-        "[${this.componentType!!.jvmType}"
+        "[${this.componentType!!.jvmSignature}"
     else
         this.jvmPrimitiveType?.shortName ?: canonicalName.toJVMType()
 }
