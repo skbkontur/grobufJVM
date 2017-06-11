@@ -14,13 +14,13 @@ internal class ArraySerializerBuilder(classLoader: DynamicClassesLoader,
     private val elementSerializerType = fragmentSerializerCollection.getFragmentSerializerType(elementType)
     private val elementSerializerField = defineField("elementSerializer", elementSerializerType, null, true)
 
-    override fun MethodVisitor.countSizeNotNull() {
+    override fun MethodVisitor.countSizeNotNull(): Int {
         visitLdcInsn(1 /* typeCode */ + 4 /* data length */ + 4 /* array length */) // stack: [9 => size]
         loadObj()                                                                   // stack: [size, obj]
         visitInsn(Opcodes.ARRAYLENGTH)                                              // stack: [size, obj.length]
         visitInsn(Opcodes.DUP)                                                      // stack: [size, obj.length, obj.length]
-        val lengthSlot = 3
-        saveToSlot<Int>(lengthSlot)                                                 // length = obj.length; stack: [size, length]
+        val length = declareLocal<Int>()
+        saveToLocal(length)                                                         // length = obj.length; stack: [size, length]
         val doneLabel = Label()
         visitJumpInsn(Opcodes.IFEQ, doneLabel)                                      // if (length == 0) goto done; stack: [size]
 
@@ -43,98 +43,98 @@ internal class ArraySerializerBuilder(classLoader: DynamicClassesLoader,
         visitInsn(Opcodes.IADD)                                                     // stack: [size, index + 1]
         visitInsn(Opcodes.DUP)                                                      // stack: [size, index + 1, index + 1]
         saveToSlot<Int>(indexSlot)                                                  // index = index + 1; stack: [size, index]
-        loadSlot<Int>(lengthSlot)                                                   // stack: [size, index, length]
+        loadLocal(length)                                                           // stack: [size, index, length]
         visitJumpInsn(Opcodes.IF_ICMPLT, loopStartLabel)                            // if (index < length) goto loopStart; stack: [size]
 
         visitLabel(doneLabel)
         ret<Int>()                                                                  // return size; stack: []
-        visitMaxs(5, 5)
+        return 5
     }
 
-    override fun MethodVisitor.writeNotNull() {
+    override fun MethodVisitor.writeNotNull(): Int {
         writeSafe<Byte> { visitLdcInsn(GroBufTypeCode.Array.value) }
 
-        val startSlot = 3
+        val start = declareLocal<Int>()
         loadIndex<WriteContext>()                                                   // stack: [context.index]
-        saveToSlot<Int>(startSlot)                                                  // start = context.index; stack: []
+        saveToLocal(start)                                                          // start = context.index; stack: []
         increaseIndexBy<WriteContext>(4)                                            // context.index += 4; stack: []
 
         loadObj()                                                                   // stack: [obj]
         visitInsn(Opcodes.ARRAYLENGTH)                                              // stack: [obj.length]
         visitInsn(Opcodes.DUP)                                                      // stack: [obj.length, obj.length]
-        val lengthSlot = 4
-        saveToSlot<Int>(lengthSlot)                                                 // length = obj.length; stack: [length]
-        writeSafe<Int> { loadSlot<Int>(lengthSlot) }                                // writeIntSafe(length); stack: [length]
+        val length = declareLocal<Int>()
+        saveToLocal(length)                                                         // length = obj.length; stack: [length]
+        writeSafe<Int> { loadLocal(length) }                                        // writeIntSafe(length); stack: [length]
         val doneLabel = Label()
         visitJumpInsn(Opcodes.IFEQ, doneLabel)                                      // if (length == 0) goto done; stack: []
 
-        val indexSlot = 5
+        val index = declareLocal<Int>()
         visitLdcInsn(0)                                                             // stack: [0]
-        saveToSlot<Int>(indexSlot)                                                  // index = 0; stack: []
+        saveToLocal(index)                                                          // index = 0; stack: []
         val loopStartLabel = Label()
         visitLabel(loopStartLabel)
         loadField(elementSerializerField)                                           // stack: [elementSerializer]
         loadContext()                                                               // stack: [elementSerializer, context]
         loadObj()                                                                   // stack: [elementSerializer, context, obj]
-        loadSlot<Int>(indexSlot)                                                    // stack: [elementSerializer, context, obj, index]
+        loadLocal(index)                                                            // stack: [elementSerializer, context, obj, index]
         visitInsn(Opcodes.AALOAD)                                                   // stack: [elementSerializer, context, obj[index]]
         callVirtual(elementSerializerType, "write",
                 listOf(WriteContext::class.java, elementType), Void::class.java)    // elementSerializer.write(context, obj[index]); stack: []
 
-        loadSlot<Int>(indexSlot)                                                    // stack: [index]
+        loadLocal(index)                                                            // stack: [index]
         visitLdcInsn(1)                                                             // stack: [index, 1]
         visitInsn(Opcodes.IADD)                                                     // stack: [index + 1]
         visitInsn(Opcodes.DUP)                                                      // stack: [index + 1, index + 1]
-        saveToSlot<Int>(indexSlot)                                                  // index = index + 1; stack: [index]
-        loadSlot<Int>(lengthSlot)                                                   // stack: [index, length]
+        saveToLocal(index)                                                          // index = index + 1; stack: [index]
+        loadLocal(length)                                                           // stack: [index, length]
         visitJumpInsn(Opcodes.IF_ICMPLT, loopStartLabel)                            // if (index < length) goto loopStart; stack: []
 
         visitLabel(doneLabel)
-        writeLength(startSlot)
+        writeLength(start)
         ret<Void>()
-        visitMaxs(6, 6)
+        return 6
     }
 
-    override fun MethodVisitor.readNotNull() {
+    override fun MethodVisitor.readNotNull(): Int {
         assertTypeCode(GroBufTypeCode.Array)
 
         readSafe<Int>()                                            // stack: [data length]
         loadIndex<ReadContext>()                                   // stack: [data length, context.index]
-        val endSlot = 3
+        val end = declareLocal<Int>()
         visitInsn(Opcodes.IADD)                                    // stack: [data length + context.index]
-        saveToSlot<Int>(endSlot)                                   // end = context.index + data length; stack: []
+        saveToLocal(end)                                           // end = context.index + data length; stack: []
         readSafe<Int>()                                            // stack: [length]
-        val lengthSlot = 4
+        val length = declareLocal<Int>()
         visitInsn(Opcodes.DUP)                                     // stack: [length, length]
-        saveToSlot<Int>(lengthSlot)                                // stack: [length]
+        saveToLocal(length)                                        // stack: [length]
         visitTypeInsn(Opcodes.ANEWARRAY, elementType.jvmType.name) // stack: [new elementType[length] => result]
-        loadSlot<Int>(lengthSlot)
+        loadLocal(length)
         val doneLabel = Label()
         visitJumpInsn(Opcodes.IFEQ, doneLabel)                     // if (length == 0) goto done; stack: [result]
 
-        val indexSlot = 5
+        val index = declareLocal<Int>()
         visitLdcInsn(0)                                            // stack: [result, 0]
-        saveToSlot<Int>(indexSlot)                                 // index = 0; stack: [result]
+        saveToLocal(index)                                         // index = 0; stack: [result]
         val loopStartLabel = Label()
         visitLabel(loopStartLabel)
         visitInsn(Opcodes.DUP)                                     // stack: [result, result]
-        loadSlot<Int>(indexSlot)                                   // stack: [result, result, index]
+        loadLocal(index)                                           // stack: [result, result, index]
         loadField(elementSerializerField)                          // stack: [result, result, index, elementSerializer]
         loadContext()                                              // stack: [result, result, index, elementSerializer, context]
         callVirtual(elementSerializerType, "read",
                 listOf(ReadContext::class.java), elementType)      // stack: [result, result, index, elementSerializer.read(context)]
         visitInsn(Opcodes.AASTORE)                                 // result[index] = elementSerializer.read(context); stack: [result]
 
-        loadSlot<Int>(indexSlot)                                   // stack: [result, index]
+        loadLocal(index)                                           // stack: [result, index]
         visitLdcInsn(1)                                            // stack: [result, index, 1]
         visitInsn(Opcodes.IADD)                                    // stack: [result, index + 1]
         visitInsn(Opcodes.DUP)                                     // stack: [result, index + 1, index + 1]
-        saveToSlot<Int>(indexSlot)                                 // index = index + 1; stack: [result, index]
-        loadSlot<Int>(lengthSlot)                                  // stack: [result, index, length]
+        saveToLocal(index)                                         // index = index + 1; stack: [result, index]
+        loadLocal(length)                                          // stack: [result, index, length]
         visitJumpInsn(Opcodes.IF_ICMPLT, loopStartLabel)           // if (index < length) goto loopStart; stack: [result]
 
         visitLabel(doneLabel)
-        loadSlot<Int>(endSlot)                                     // stack: [result, end]
+        loadLocal(end)                                             // stack: [result, end]
         loadIndex<ReadContext>()                                   // stack: [result, end, context.index]
         val badDataLabel = Label()
         visitJumpInsn(Opcodes.IF_ICMPNE, badDataLabel)             // if (end != context.index) goto badData; stack: [result]
@@ -145,6 +145,6 @@ internal class ArraySerializerBuilder(classLoader: DynamicClassesLoader,
         callVirtual0<Void>(classType, "throwBadDataLengthError")
         ret(klass)
 
-        visitMaxs(5, 6)
+        return 5
     }
 }

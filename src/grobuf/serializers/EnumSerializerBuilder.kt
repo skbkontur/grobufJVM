@@ -22,13 +22,13 @@ internal class EnumSerializerBuilder(classLoader: DynamicClassesLoader,
                   .toLongArray()
     )
 
-    override fun MethodVisitor.countSizeNotNull() {
+    override fun MethodVisitor.countSizeNotNull(): Int {
         visitLdcInsn(1 /* typeCode */ + 8 /* hashCode */)
         ret<Int>()
-        visitMaxs(1, 3)
+        return 1
     }
 
-    override fun MethodVisitor.writeNotNull() {
+    override fun MethodVisitor.writeNotNull(): Int {
         writeSafe<Byte> { visitLdcInsn(GroBufTypeCode.Enum.value) } // this.writeByteSafe(result, index, Object]; stack: []
         writeSafe<Long> {
             loadField(hashCodesField)                               // stack: [this.hashCodes]
@@ -37,17 +37,17 @@ internal class EnumSerializerBuilder(classLoader: DynamicClassesLoader,
             visitInsn(Opcodes.LALOAD)                               // stack: [this.hashCodes[obj.ordinal()]]
         }                                                           // this.writeLongSafe(result, index, this.hashCodes[obj.ordinal()]; stack: []
         ret<Void>()
-        visitMaxs(5, 3)
+        return 5
     }
 
-    override fun MethodVisitor.readNotNull() {
+    override fun MethodVisitor.readNotNull(): Int {
         assertTypeCode(GroBufTypeCode.Enum)
         readSafe<Long>()                // stack: [*(long*)data[index]]
-        val hashCodeSlot = 4
-        saveToSlot<Long>(hashCodeSlot)  // hashCode = *(long*)data[index]; stack: []
+        val hashCode = declareLocal<Long>()
+        saveToLocal(hashCode)           // hashCode = *(long*)data[index]; stack: []
         val defaultLabel = Label()
         loadField(valuesField)          // stack: [this.values]
-        genSwitch(values.map { it.second }, hashCodeSlot, defaultLabel) {
+        genSwitch(values.map { it.second }, hashCode.slot, defaultLabel) {
             visitLdcInsn(it)            // stack: [this.values, index]
             visitInsn(Opcodes.AALOAD)   // stack: [this.values[index]]
             castObjectTo(klass.jvmType) // stack: [(type)this.value[index]]
@@ -58,6 +58,6 @@ internal class EnumSerializerBuilder(classLoader: DynamicClassesLoader,
         visitInsn(Opcodes.POP)          // stack: []
         loadDefault(klass)              // stack: [null]
         ret(klass)                      // return null; stack: []
-        visitMaxs(3, 5)
+        return 3
     }
 }

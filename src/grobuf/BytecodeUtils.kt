@@ -86,4 +86,3 @@ internal fun computeMethodJVMSignature(argumentTypes: List<Class<*>>, returnType
 
 internal fun computeMethodJVMSignature(argumentTypes: List<KClass<*>>, returnType: KClass<*>) =
         "(${argumentTypes.joinToString(separator = "") { it.jvmType.signature }})${returnType.jvmType.signature}"
-internal val Class<*>.occupiesTwoSlots get() = this == Long::class.java || this == Double::class.java

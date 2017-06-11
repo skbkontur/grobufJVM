@@ -13,19 +13,44 @@ internal abstract class FragmentSerializerBuilderBase(classLoader: DynamicClasse
         classType      = JVMType.FromString("${klass.jvmType.name.toJVMIdentifier()}_Serializer"),
         superClassType = FragmentSerializer::class.jvmType) {
 
+    class Local(val type: JVMType, val slot: Int) {
+        val size = if (type.occupiesTwoSlots) 2 else 1
+
+        val nextSlot = slot + size
+
+        private val JVMType.occupiesTwoSlots get() =
+                this == JVMPrimitive.LONG.jvmType || this == JVMPrimitive.DOUBLE.jvmType
+    }
+
+    private val locals = mutableListOf<Local>()
+    private lateinit var objLocal: Local
+    private lateinit var contextLocal: Local
+    private lateinit var typeCodeLocal: Local
+
     override fun buildBody() {
         buildCountMethod()
         buildWriteMethod()
         buildReadMethod()
     }
 
-    protected fun MethodVisitor.loadObj() {
-        loadSlot(klass, 2)
-    }
+    protected fun declareLocal(type: JVMType) =
+            Local(type, locals.lastOrNull()?.nextSlot ?: 0).also {
+                locals += it
+            }
 
-    protected fun MethodVisitor.loadContext() {
-        loadSlot<Any>(1)
-    }
+    protected inline fun <reified T> declareLocal() = declareLocal(T::class.jvmType)
+
+    protected fun declareLocal(klass: Class<*>) = declareLocal(klass.jvmType)
+
+    protected fun MethodVisitor.loadLocal(local: Local) = loadSlot(local.type, local.slot)
+
+    protected fun MethodVisitor.saveToLocal(local: Local) = saveToSlot(local.type, local.slot)
+
+    protected fun MethodVisitor.loadObj() = loadLocal(objLocal)
+
+    protected fun MethodVisitor.loadContext() = loadLocal(contextLocal)
+
+    private val occupiedSlotsCount get() = locals.last().nextSlot
 
     //---------- Writing -------------------------------------------------------//
 
@@ -79,23 +104,25 @@ internal abstract class FragmentSerializerBuilderBase(classLoader: DynamicClasse
         increaseIndexBy<WriteContext>(jvmPrimitive.size)                                   // index += type.size; stack: []
     }
 
-    protected fun MethodVisitor.writeLength(startSlot: Int) {
+    protected fun MethodVisitor.writeLength(start: Local) {
         loadThis()                                         // stack: [this]
         loadResult()                                       // stack: [this, result]
-        loadSlot<Int>(startSlot)                           // stack: [this, result, start]
+        loadLocal(start)                                   // stack: [this, result, start]
         loadIndex<WriteContext>()                          // stack: [this, result, start, index]
-        loadSlot<Int>(startSlot)                           // stack: [this, result, start, index, start]
+        loadLocal(start)                                   // stack: [this, result, start, index, start]
         visitLdcInsn(4)                                    // stack: [this, result, start, index, start, 4]
         visitInsn(Opcodes.IADD)                            // stack: [this, result, start, index, start + 4]
         visitInsn(Opcodes.ISUB)                            // stack: [this, result, start, index - start - 4 => length]
         callVirtual3<ByteArray, Int, Int, Void>(classType,
                 JVMPrimitive.INT.writeUnsafeMethodName)    // this.writeIntUnsafe(result, start, length); stack: []
-
     }
 
     private fun buildCountMethod() {
         classWriter.defineMethod(Opcodes.ACC_PUBLIC, "countSize",
                 listOf(WriteContext::class.java, klass), Int::class.java).run {
+            declareLocal(classType) // this.
+            contextLocal = declareLocal<WriteContext>()
+            objLocal = declareLocal(klass)
             if (klass.isReference) {
                 loadObj()                                      // stack: [obj]
                 val notNullLabel = Label()
@@ -104,7 +131,8 @@ internal abstract class FragmentSerializerBuilderBase(classLoader: DynamicClasse
                 ret<Int>()                                     // return 1; stack: []
                 visitLabel(notNullLabel)
             }
-            countSizeNotNull()
+            visitMaxs(countSizeNotNull(), occupiedSlotsCount)
+            locals.clear()
             visitEnd()
         }
         if (klass != Any::class.java) {
@@ -119,11 +147,17 @@ internal abstract class FragmentSerializerBuilderBase(classLoader: DynamicClasse
         }
     }
 
-    protected abstract fun MethodVisitor.countSizeNotNull()
+    /**
+     * Returns stack size.
+     */
+    protected abstract fun MethodVisitor.countSizeNotNull(): Int
 
     private fun buildWriteMethod() {
         classWriter.defineMethod(Opcodes.ACC_PUBLIC, "write",
                         listOf(WriteContext::class.java, klass), Void::class.java).run {
+            declareLocal(classType) // this.
+            contextLocal = declareLocal<WriteContext>()
+            objLocal = declareLocal(klass)
             if (klass.isReference) {
                 loadObj()                                                    // stack: [obj]
                 val notNullLabel = Label()
@@ -132,7 +166,8 @@ internal abstract class FragmentSerializerBuilderBase(classLoader: DynamicClasse
                 ret<Void>()                                                  // return; stack: []
                 visitLabel(notNullLabel)
             }
-            writeNotNull()
+            visitMaxs(writeNotNull(), occupiedSlotsCount)
+            locals.clear()
             visitEnd()
         }
         if (klass != Any::class.java) {
@@ -147,7 +182,10 @@ internal abstract class FragmentSerializerBuilderBase(classLoader: DynamicClasse
         }
     }
 
-    protected abstract fun MethodVisitor.writeNotNull()
+    /**
+     * Returns stack size.
+     */
+    protected abstract fun MethodVisitor.writeNotNull(): Int
 
     //---------- Reading -----------------------------------------------------------//
 
@@ -177,9 +215,7 @@ internal abstract class FragmentSerializerBuilderBase(classLoader: DynamicClasse
         increaseIndexBy<ReadContext>(jvmPrimitive.size)                             // index += type.size; stack: [this.read<type>Safe(result, index)]
     }
 
-    protected fun MethodVisitor.loadTypeCode() {
-        loadSlot<Int>(2)
-    }
+    protected fun MethodVisitor.loadTypeCode() = loadLocal(typeCodeLocal)
 
     protected fun MethodVisitor.loadDefault(klass: Class<*>) {
         when (klass.jvmPrimitiveType) {
@@ -213,9 +249,13 @@ internal abstract class FragmentSerializerBuilderBase(classLoader: DynamicClasse
     private fun buildReadMethod() {
         classWriter.defineMethod(Opcodes.ACC_PUBLIC, "read",
                 listOf(ReadContext::class.java), klass).run {
+            declareLocal(classType) // this.
+            contextLocal = declareLocal<ReadContext>()
+            typeCodeLocal = declareLocal<Int>()
+
             readSafe<Byte>()                                    // stack: [this.readByteSafe(context.data, context.index) => typeCode]
             visitInsn(Opcodes.DUP)                              // stack: [typeCode, typeCode]
-            saveToSlot<Int>(2)                                  // slot_2 = typeCode; stack: [typeCode]
+            saveToLocal(typeCodeLocal)
             val notEmptyLabel = Label()
             visitLdcInsn(GroBufTypeCode.Empty.value)            // stack: [typeCode, Empty]
             visitJumpInsn(Opcodes.IF_ICMPNE, notEmptyLabel)     // if (type != Empty) goto notEmpty; stack: []
@@ -228,7 +268,7 @@ internal abstract class FragmentSerializerBuilderBase(classLoader: DynamicClasse
             loadTypeCode()                                      // stack: [this, typeCode]
             callVirtual1<Int, Void>(classType, "checkTypeCode") // this.checkTypeCode(typeCode); stack: []
 
-            readNotNull()
+            visitMaxs(readNotNull(), occupiedSlotsCount)
             visitEnd()
         }
         if (klass != Any::class.java) {
@@ -242,7 +282,10 @@ internal abstract class FragmentSerializerBuilderBase(classLoader: DynamicClasse
         }
     }
 
-    protected abstract fun MethodVisitor.readNotNull()
+    /**
+     * Returns stack size.
+     */
+    protected abstract fun MethodVisitor.readNotNull(): Int
 
     //---------- Bridges building ---------------------------------------------------------//
 

@@ -64,6 +64,9 @@ private fun MethodVisitor.loadSlot(jvmPrimitive: JVMPrimitive?, index: Int) {
     visitVarInsn(opcode, index)
 }
 
+internal fun MethodVisitor.loadSlot(type: JVMType, index: Int) =
+        loadSlot((type as? JVMType.Primitive)?.jvmPrimitive, index)
+
 internal fun MethodVisitor.loadSlot(klass: Class<*>, index: Int) = loadSlot(klass.jvmPrimitiveType, index)
 
 internal inline fun<reified T> MethodVisitor.loadSlot(index: Int) = loadSlot(T::class.jvmPrimitiveType, index)
@@ -82,6 +85,9 @@ private fun MethodVisitor.saveToSlot(jvmPrimitive: JVMPrimitive?, index: Int) {
     }
     visitVarInsn(opcode, index)
 }
+
+internal fun MethodVisitor.saveToSlot(type: JVMType, index: Int) =
+        saveToSlot((type as? JVMType.Primitive)?.jvmPrimitive, index)
 
 internal fun MethodVisitor.saveToSlot(klass: Class<*>, index: Int) = saveToSlot(klass.jvmPrimitiveType, index)
 

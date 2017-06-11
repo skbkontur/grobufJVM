@@ -10,23 +10,23 @@ internal class PrimitivesSerializerBuilder(classLoader: DynamicClassesLoader,
 
     private val jvmPrimitiveType = klass.jvmPrimitiveType!!
 
-    override fun MethodVisitor.countSizeNotNull() {
+    override fun MethodVisitor.countSizeNotNull(): Int {
         visitLdcInsn(1 /* typeCode */ + jvmPrimitiveType.size)
         ret<Int>()
-        visitMaxs(1, 3)
+        return 1
     }
 
-    override fun MethodVisitor.writeNotNull() {
+    override fun MethodVisitor.writeNotNull(): Int {
         writeSafe<Byte> { visitLdcInsn(klass.groBufTypeCode.value) } // this.writeByteSafe(result, index, typeCode]; stack: []
         writeSafe(klass) { loadObj() }                               // this.write<type>Safe(result, index, obj); stack: []
         ret<Void>()                                                  // return; stack: []
-        visitMaxs(4, 3)
+        return 4
     }
 
-    override fun MethodVisitor.readNotNull() {
+    override fun MethodVisitor.readNotNull(): Int {
         // TODO: Coercion between primitives.
         readSafe(klass) // stack: [this.read<type>Safe(result, index)]
         ret(klass)      // return this.read<type>Safe(result, index); stack: []
-        visitMaxs(3, 3)
+        return 3
     }
 }
