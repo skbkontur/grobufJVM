@@ -6,7 +6,7 @@ data class A(/*@JvmField val b: B?, */@JvmField var x: Int, @JvmField var y: Int
 
 class B(@JvmField var a: A, @JvmField var x: Int)
 
-class B2(@JvmField var a: A?, @JvmField var x: Int)
+class B2(@JvmField var a: A?, @JvmField var x: Int?)
 
 fun main(args: Array<String>) {
     val fragmentSerializerCollection = FragmentSerializerCollection()

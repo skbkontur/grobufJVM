@@ -16,7 +16,8 @@ internal enum class JVMPrimitive(val shortName: String, val javaName: String, va
     DOUBLE ("D", "double" , "Double"   , 8, Opcodes.T_DOUBLE , Double::class.java , Double::class ),
     VOID   ("V", "void"   , null       , 0, 0                , Void::class.java   , Void::class   );
 
-    val boxType by lazy { JVMType.FromString("java/lang/$javaBoxName") }
+    val jvmType by lazy { JVMType.Primitive(this) }
+    val boxType by lazy { if (javaBoxName == null) null else JVMType.FromString("java/lang/$javaBoxName") }
     val unboxMethodName by lazy { if (javaBoxName == null) "" else "${javaName}Value" }
     val boxMethodName by lazy { if (javaBoxName == null) "" else "valueOf" }
 }
@@ -66,11 +67,16 @@ internal val Class<*>.jvmPrimitiveType get() =
 internal val KClass<*>.jvmPrimitiveType get() =
         enumValues<JVMPrimitive>().firstOrNull { it.kClass == this }
 
+internal val JVMType.isBox get() =
+        enumValues<JVMPrimitive>().any { it.boxType == this }
+
 internal val Class<*>.jvmType get() =
         jvmPrimitiveType?.let { JVMType.Primitive(it) } ?: JVMType.FromClass(this)
 
 internal val KClass<*>.jvmType get() =
         jvmPrimitiveType?.let { JVMType.Primitive(it) } ?: JVMType.FromClass(this.java)
+
+internal val Class<*>.isReference get() = jvmPrimitiveType == null
 
 internal fun computeMethodJVMSignature(argumentTypes: List<JVMType>, returnType: JVMType) =
         "(${argumentTypes.joinToString(separator = "") { it.signature }})${returnType.signature}"

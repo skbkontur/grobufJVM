@@ -64,6 +64,9 @@ internal class FragmentSerializerCollection {
             else
                 ArraySerializerBuilder(this, klass)
 
+        klass.jvmType.isBox ->
+            BoxesSerializerBuilder(this, klass)
+
         else -> ClassSerializerBuilder(this, klass)
     }
 

@@ -1,7 +1,5 @@
 package grobuf
 
-internal val Class<*>.isReference get() = jvmPrimitiveType == null
-
 internal class GroBufRandom(seed: Int) {
     private var m_inext = 0
     private var m_inextp = 0
