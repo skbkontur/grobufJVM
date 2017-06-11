@@ -19,8 +19,8 @@ internal class ClassSerializerBuilder(fragmentSerializerCollection: FragmentSeri
             val fieldSlot = 3
             if (it.type.isReference) {
                 loadObj()                                                       // stack: [size, obj]
-                visitFieldInsn(Opcodes.GETFIELD, klass.jvmType,
-                        it.name, it.type.jvmSignature)                          // stack: [size, obj.field]
+                visitFieldInsn(Opcodes.GETFIELD, klass.jvmType.name,
+                        it.name, it.type.jvmType.signature)                     // stack: [size, obj.field]
                 visitInsn(Opcodes.DUP)                                          // stack: [size, obj.field, obj.field]
                 saveToSlot<Any>(fieldSlot)                                      // field = obj.field; stack: [size, obj.field]
                 visitJumpInsn(Opcodes.IFNULL, fieldVisitedLabel)                // if (obj.field == null) goto fieldVisited; stack: [size]
@@ -31,8 +31,8 @@ internal class ClassSerializerBuilder(fragmentSerializerCollection: FragmentSeri
                 loadSlot<Any>(fieldSlot)                                        // stack: [size, fieldSerializer, context, obj.field]
             else {
                 loadObj()                                                       // stack: [size, fieldSerializer, context, obj]
-                visitFieldInsn(Opcodes.GETFIELD, klass.jvmType,
-                        it.name, it.type.jvmSignature)                          // stack: [size, fieldSerializer, context, obj.field]
+                visitFieldInsn(Opcodes.GETFIELD, klass.jvmType.name,
+                        it.name, it.type.jvmType.signature)                     // stack: [size, fieldSerializer, context, obj.field]
             }
             callVirtual(fieldSerializerType, "countSize",
                     listOf(WriteContext::class.java, it.type), Int::class.java) // stack: [size, fieldSerializer.countSize(context, obj.field)]
@@ -57,8 +57,8 @@ internal class ClassSerializerBuilder(fragmentSerializerCollection: FragmentSeri
             val fieldSlot = 4
             if (it.type.isReference) {
                 loadObj()                                                        // stack: [obj]
-                visitFieldInsn(Opcodes.GETFIELD, klass.jvmType,
-                        it.name, it.type.jvmSignature)                           // stack: [obj.field]
+                visitFieldInsn(Opcodes.GETFIELD, klass.jvmType.name,
+                        it.name, it.type.jvmType.signature)                      // stack: [obj.field]
                 visitInsn(Opcodes.DUP)                                           // stack: [obj.field, obj.field]
                 saveToSlot<Any>(fieldSlot)                                       // field = obj.field; stack: [obj.field]
                 visitJumpInsn(Opcodes.IFNULL, fieldVisitedLabel)                 // if (obj.field == null) goto fieldVisited; stack: []
@@ -70,8 +70,8 @@ internal class ClassSerializerBuilder(fragmentSerializerCollection: FragmentSeri
                 loadSlot<Any>(fieldSlot)                                         // stack: [fieldSerializer, context, obj.field]
             else {
                 loadObj()                                                        // stack: [fieldSerializer, context, obj]
-                visitFieldInsn(Opcodes.GETFIELD, klass.jvmType,
-                        it.name, it.type.jvmSignature)                           // stack: [fieldSerializer, context, obj.field]
+                visitFieldInsn(Opcodes.GETFIELD, klass.jvmType.name,
+                        it.name, it.type.jvmType.signature)                      // stack: [fieldSerializer, context, obj.field]
             }
             callVirtual(fieldSerializerType, "write",
                     listOf(WriteContext::class.java, it.type), Void::class.java) // fieldSerializer.write(context, obj.field); stack: []
@@ -92,13 +92,13 @@ internal class ClassSerializerBuilder(fragmentSerializerCollection: FragmentSeri
 
         val parameterlessConstructor = klass.constructors.firstOrNull { it.parameterCount == 0 }
         if (parameterlessConstructor != null) {
-            visitTypeInsn(Opcodes.NEW, klass.jvmType)                // stack: [new klass() => result]
+            visitTypeInsn(Opcodes.NEW, klass.jvmType.name)           // stack: [new klass() => result]
             visitInsn(Opcodes.DUP)                                   // stack: [result, result]
             ctorCall0(klass.jvmType)                                 // inst.<init>(); stack: [result]
         } else {
             loadThis()                                               // stack: [this]
             loadField(klassField)                                    // stack: [this, klass]
-            callVirtual1<Class<*>, Any>(className, "createInstance") // stack: [this.createInstance(klass)]
+            callVirtual1<Class<*>, Any>(classType, "createInstance") // stack: [this.createInstance(klass)]
             castObjectTo(klass.jvmType)                              // stack: [(klass)this.createInstance(klass) => result]
         }
 
@@ -126,8 +126,8 @@ internal class ClassSerializerBuilder(fragmentSerializerCollection: FragmentSeri
             loadContext()                                            // stack: [result, result, fieldSerializer, context]
             callVirtual(fieldSerializerType, "read",
                     listOf(ReadContext::class.java), field.type)     // stack: [result, result, fieldSerializer.read(context)]
-            visitFieldInsn(Opcodes.PUTFIELD, klass.jvmType,
-                    field.name, field.type.jvmSignature)             // result.field = fieldSerializer.read(context); stack: [result]
+            visitFieldInsn(Opcodes.PUTFIELD, klass.jvmType.name,
+                    field.name, field.type.jvmType.signature)        // result.field = fieldSerializer.read(context); stack: [result]
             visitJumpInsn(Opcodes.GOTO, loopEndLabel)
         }
 
@@ -135,7 +135,7 @@ internal class ClassSerializerBuilder(fragmentSerializerCollection: FragmentSeri
         loadThis()                                                   // stack: [result, this]
         readSafe<Byte>()                                             // stack: [result, this, *(byte*)data[index] => fieldTypeCode]
         loadContext()                                                // stack: [result, this, fieldTypeCode, context]
-        callVirtual2<Int, ReadContext, Void>(className, "skipValue") // this.skipValue(fieldTypeCode, context); stack: [result]
+        callVirtual2<Int, ReadContext, Void>(classType, "skipValue") // this.skipValue(fieldTypeCode, context); stack: [result]
 
         visitLabel(loopEndLabel)
         loadIndex<ReadContext>()                                     // stack: [result, index]
@@ -150,7 +150,7 @@ internal class ClassSerializerBuilder(fragmentSerializerCollection: FragmentSeri
 
         visitLabel(badDataLabel)
         loadThis()
-        callVirtual0<Void>(className, "throwBadDataLengthError")
+        callVirtual0<Void>(classType, "throwBadDataLengthError")
         ret(klass)
 
         visitLabel(emptyLabel)                                       // stack: [result, 0]
@@ -165,9 +165,9 @@ internal class ClassSerializerBuilder(fragmentSerializerCollection: FragmentSeri
                   .filterNot { Modifier.isStatic(it.modifiers) }
                   .filterNot { Modifier.isFinal(it.modifiers) }
 
-    private fun getSerializerField(type: String) = serializerFields.getOrPut(type) {
-        defineField("${type.toJVMIdentifier()}_serializer", type.toJVMType(), null, true)
+    private fun getSerializerField(type: JVMType) = serializerFields.getOrPut(type) {
+        defineField("${type.name.toJVMIdentifier()}_serializer", type, null, true)
     }
 
-    private val serializerFields = mutableMapOf<String, Int>()
+    private val serializerFields = mutableMapOf<JVMType, Int>()
 }

@@ -3,14 +3,12 @@ package grobuf.serializers
 import grobuf.GroBufTypeCode
 import sun.misc.Unsafe
 
-class WriteContext {
-    @JvmField var result: ByteArray = ByteArray(0)
-    @JvmField var index = 0
+class WriteContext(@JvmField var result: ByteArray, @JvmField var index: Int) {
+    constructor(): this(ByteArray(0), 0)
 }
 
-class ReadContext {
-    @JvmField var data: ByteArray = ByteArray(0)
-    @JvmField var index = 0
+class ReadContext(@JvmField var data: ByteArray, @JvmField var index: Int) {
+    constructor(): this(ByteArray(0), 0)
 }
 
 private val theUnsafe = Unsafe::class.java.getDeclaredField("theUnsafe").let {

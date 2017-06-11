@@ -8,7 +8,7 @@ import org.objectweb.asm.Opcodes
 internal abstract class FragmentSerializerBuilderBase(protected val fragmentSerializerCollection: FragmentSerializerCollection,
                                                       protected val klass: Class<*>)
     : ClassBuilder<FragmentSerializer<*>>(
-        className      = "${klass.jvmType.toJVMIdentifier()}_Serializer",
+        classType      = JVMType.FromString("${klass.jvmType.name.toJVMIdentifier()}_Serializer"),
         superClassType = FragmentSerializer::class.jvmType) {
 
     override fun buildBody() {
@@ -29,12 +29,12 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
 
     protected fun MethodVisitor.loadResult() {
         loadContext()
-        visitFieldInsn(Opcodes.GETFIELD, WriteContext::class.jvmType, "result", ByteArray::class.jvmSignature)
+        visitFieldInsn(Opcodes.GETFIELD, WriteContext::class.jvmType.name, "result", ByteArray::class.jvmType.signature)
     }
 
     protected inline fun <reified T> MethodVisitor.loadIndex() {
         loadContext()
-        visitFieldInsn(Opcodes.GETFIELD, T::class.jvmType, "index", Int::class.jvmSignature)
+        visitFieldInsn(Opcodes.GETFIELD, T::class.jvmType.name, "index", Int::class.jvmType.signature)
     }
 
     protected inline fun <reified T> MethodVisitor.increaseIndexBy(value: Int) {
@@ -42,7 +42,7 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
         loadIndex<T>()
         visitLdcInsn(value)
         visitInsn(Opcodes.IADD)
-        visitFieldInsn(Opcodes.PUTFIELD, T::class.jvmType, "index", Int::class.jvmSignature)
+        visitFieldInsn(Opcodes.PUTFIELD, T::class.jvmType.name, "index", Int::class.jvmType.signature)
     }
 
     protected inline fun <reified T> MethodVisitor.increaseIndexBy(valueLoader: MethodVisitor.() -> Unit) {
@@ -50,7 +50,7 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
         loadIndex<T>()
         valueLoader()
         visitInsn(Opcodes.IADD)
-        visitFieldInsn(Opcodes.PUTFIELD, T::class.jvmType, "index", Int::class.jvmSignature)
+        visitFieldInsn(Opcodes.PUTFIELD, T::class.jvmType.name, "index", Int::class.jvmType.signature)
     }
 
     protected fun MethodVisitor.writeSafe(klass: Class<*>, valueLoader: MethodVisitor.() -> Unit) {
@@ -59,7 +59,7 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
         loadResult()                                                                     // stack: [this, result]
         loadIndex<WriteContext>()                                                        // stack: [this, result, index]
         valueLoader()                                                                    // stack: [this, result, index, value]
-        callVirtual(className, "write${jvmPrimitive.name}Safe",
+        callVirtual(classType, "write${jvmPrimitive.name}Safe",
                 listOf(ByteArray::class.java, Int::class.java, klass), Void::class.java) // this.write<type>Safe(result, index, value); stack: []
         increaseIndexBy<WriteContext>(jvmPrimitive.size)                                 // index += type.size; stack: []
     }
@@ -70,7 +70,7 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
         loadResult()                                                                      // stack: [this, result]
         loadIndex<WriteContext>()                                                         // stack: [this, result, index]
         valueLoader()                                                                     // stack: [this, result, index, value]
-        callVirtual3<ByteArray, Int, T, Void>(className, "write${jvmPrimitive.name}Safe") // this.write<type>Safe(result, index, value); stack: []
+        callVirtual3<ByteArray, Int, T, Void>(classType, "write${jvmPrimitive.name}Safe") // this.write<type>Safe(result, index, value); stack: []
         increaseIndexBy<WriteContext>(jvmPrimitive.size)                                  // index += type.size; stack: []
     }
 
@@ -83,7 +83,7 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
         visitLdcInsn(4)                                                          // stack: [this, result, start, index, start, 4]
         visitInsn(Opcodes.IADD)                                                  // stack: [this, result, start, index, start + 4]
         visitInsn(Opcodes.ISUB)                                                  // stack: [this, result, start, index - start - 4 => length]
-        callVirtual3<ByteArray, Int, Int, Void>(className, "writeIntUnsafe")     // this.writeIntUnsafe(result, start, length); stack: []
+        callVirtual3<ByteArray, Int, Int, Void>(classType, "writeIntUnsafe")     // this.writeIntUnsafe(result, start, length); stack: []
     }
 
     private fun buildCountMethod() {
@@ -146,7 +146,7 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
 
     protected fun MethodVisitor.loadData() {
         loadContext()
-        visitFieldInsn(Opcodes.GETFIELD, ReadContext::class.jvmType, "data", ByteArray::class.jvmSignature)
+        visitFieldInsn(Opcodes.GETFIELD, ReadContext::class.jvmType.name, "data", ByteArray::class.jvmType.signature)
     }
 
     protected fun MethodVisitor.readSafe(klass: Class<*>) {
@@ -154,7 +154,7 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
         loadThis()                                                     // stack: [this]
         loadData()                                                     // stack: [this, data]
         loadIndex<ReadContext>()                                       // stack: [this, data, index]
-        callVirtual(className, "read${jvmPrimitive.name}Safe",
+        callVirtual(classType, "read${jvmPrimitive.name}Safe",
                 listOf(ByteArray::class.java, Int::class.java), klass) // stack: [this.read<type>Safe(result, index)]
         increaseIndexBy<ReadContext>(jvmPrimitive.size)                // index += type.size; stack: [this.read<type>Safe(result, index)]
     }
@@ -164,7 +164,7 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
         loadThis()                                                                 // stack: [this]
         loadData()                                                                 // stack: [this, data]
         loadIndex<ReadContext>()                                                   // stack: [this, data, index]
-        callVirtual2<ByteArray, Int, T>(className, "read${jvmPrimitive.name}Safe") // stack: [this.read<type>Safe(result, index)]
+        callVirtual2<ByteArray, Int, T>(classType, "read${jvmPrimitive.name}Safe") // stack: [this.read<type>Safe(result, index)]
         increaseIndexBy<ReadContext>(jvmPrimitive.size)                            // index += type.size; stack: [this.read<type>Safe(result, index)]
     }
 
@@ -194,7 +194,7 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
         loadThis()                                                   // stack: [this]
         loadTypeCode()                                               // stack: [this, typeCode]
         loadContext()                                                // stack: [this, typeCode, context]
-        callVirtual2<Int, ReadContext, Void>(className, "skipValue") // this.skipValue(typeCode, context)]
+        callVirtual2<Int, ReadContext, Void>(classType, "skipValue") // this.skipValue(typeCode, context)]
         loadDefault(klass)
         ret(klass)
 
@@ -217,7 +217,7 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
             visitLabel(notEmptyLabel)
             loadThis()                                          // stack: [this]
             loadTypeCode()                                      // stack: [this, typeCode]
-            callVirtual1<Int, Void>(className, "checkTypeCode") // this.checkTypeCode(typeCode); stack: []
+            callVirtual1<Int, Void>(classType, "checkTypeCode") // this.checkTypeCode(typeCode); stack: []
 
             readNotNull()
             visitEnd()
@@ -254,7 +254,7 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
                 if (argumentType.erased)
                     castObjectTo(argumentType.klass.jvmType)
             }
-            callVirtual(className, name, argumentTypes.map { it.klass }, returnType.klass)
+            callVirtual(classType, name, argumentTypes.map { it.klass }, returnType.klass)
             if (returnType.erased)
                 castToObject(returnType.klass.jvmType)
             ret(returnType.actualType)

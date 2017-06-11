@@ -35,7 +35,7 @@ internal class PrimitivesArraySerializerBuilder(fragmentSerializerCollection: Fr
         loadResult()                                                                     // stack: [this, result]
         loadIndex<WriteContext>()                                                        // stack: [this, result, index]
         loadObj()                                                                        // stack: [this, result, index, obj]
-        callVirtual(className, "write${elementJvmPrimitiveType}ArraySafe",
+        callVirtual(classType, "write${elementJvmPrimitiveType}ArraySafe",
                 listOf(ByteArray::class.java, Int::class.java, klass), Void::class.java) // this.writeArray(result, index, obj); stack: []
         increaseIndexBy<WriteContext> { loadSlot<Int>(lengthSlot) }                      // index += length; stack: []
 
@@ -59,7 +59,7 @@ internal class PrimitivesArraySerializerBuilder(fragmentSerializerCollection: Fr
         loadSlot<Any>(resultSlot)                                                        // stack: [this, result]
         loadIndex<ReadContext>()                                                         // stack: [this, result, index]
         loadData()                                                                       // stack: [this, result, index, data]
-        callVirtual(className, "read${elementJvmPrimitiveType}ArraySafe",
+        callVirtual(classType, "read${elementJvmPrimitiveType}ArraySafe",
                 listOf(klass, Int::class.java, ByteArray::class.java), Void::class.java) // this.readArray(result, index, obj); stack: []
         increaseIndexBy<ReadContext> { loadSlot<Int>(lengthSlot) }                       // index += length; stack: []
 

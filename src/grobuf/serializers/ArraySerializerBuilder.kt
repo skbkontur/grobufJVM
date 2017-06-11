@@ -96,51 +96,51 @@ internal class ArraySerializerBuilder(fragmentSerializerCollection: FragmentSeri
     override fun MethodVisitor.readNotNull() {
         assertTypeCode(GroBufTypeCode.Array)
 
-        readSafe<Int>()                                         // stack: [data length]
-        loadIndex<ReadContext>()                                // stack: [data length, context.index]
+        readSafe<Int>()                                            // stack: [data length]
+        loadIndex<ReadContext>()                                   // stack: [data length, context.index]
         val endSlot = 3
-        visitInsn(Opcodes.IADD)                                 // stack: [data length + context.index]
-        saveToSlot<Int>(endSlot)                                // end = context.index + data length; stack: []
-        readSafe<Int>()                                         // stack: [length]
+        visitInsn(Opcodes.IADD)                                    // stack: [data length + context.index]
+        saveToSlot<Int>(endSlot)                                   // end = context.index + data length; stack: []
+        readSafe<Int>()                                            // stack: [length]
         val lengthSlot = 4
-        visitInsn(Opcodes.DUP)                                  // stack: [length, length]
-        saveToSlot<Int>(lengthSlot)                             // stack: [length]
-        visitTypeInsn(Opcodes.ANEWARRAY, elementType.jvmType)   // stack: [new elementType[length] => result]
+        visitInsn(Opcodes.DUP)                                     // stack: [length, length]
+        saveToSlot<Int>(lengthSlot)                                // stack: [length]
+        visitTypeInsn(Opcodes.ANEWARRAY, elementType.jvmType.name) // stack: [new elementType[length] => result]
         loadSlot<Int>(lengthSlot)
         val doneLabel = Label()
-        visitJumpInsn(Opcodes.IFEQ, doneLabel)                  // if (length == 0) goto done; stack: [result]
+        visitJumpInsn(Opcodes.IFEQ, doneLabel)                     // if (length == 0) goto done; stack: [result]
 
         val indexSlot = 5
-        visitLdcInsn(0)                                         // stack: [result, 0]
-        saveToSlot<Int>(indexSlot)                              // index = 0; stack: [result]
+        visitLdcInsn(0)                                            // stack: [result, 0]
+        saveToSlot<Int>(indexSlot)                                 // index = 0; stack: [result]
         val loopStartLabel = Label()
         visitLabel(loopStartLabel)
-        visitInsn(Opcodes.DUP)                                  // stack: [result, result]
-        loadSlot<Int>(indexSlot)                                // stack: [result, result, index]
-        loadField(elementSerializerField)                       // stack: [result, result, index, elementSerializer]
-        loadContext()                                           // stack: [result, result, index, elementSerializer, context]
+        visitInsn(Opcodes.DUP)                                     // stack: [result, result]
+        loadSlot<Int>(indexSlot)                                   // stack: [result, result, index]
+        loadField(elementSerializerField)                          // stack: [result, result, index, elementSerializer]
+        loadContext()                                              // stack: [result, result, index, elementSerializer, context]
         callVirtual(elementSerializerType, "read",
-                listOf(ReadContext::class.java), elementType)   // stack: [result, result, index, elementSerializer.read(context)]
-        visitInsn(Opcodes.AASTORE)                              // result[index] = elementSerializer.read(context); stack: [result]
+                listOf(ReadContext::class.java), elementType)      // stack: [result, result, index, elementSerializer.read(context)]
+        visitInsn(Opcodes.AASTORE)                                 // result[index] = elementSerializer.read(context); stack: [result]
 
-        loadSlot<Int>(indexSlot)                                // stack: [result, index]
-        visitLdcInsn(1)                                         // stack: [result, index, 1]
-        visitInsn(Opcodes.IADD)                                 // stack: [result, index + 1]
-        visitInsn(Opcodes.DUP)                                  // stack: [result, index + 1, index + 1]
-        saveToSlot<Int>(indexSlot)                              // index = index + 1; stack: [result, index]
-        loadSlot<Int>(lengthSlot)                               // stack: [result, index, length]
-        visitJumpInsn(Opcodes.IF_ICMPLT, loopStartLabel)        // if (index < length) goto loopStart; stack: [result]
+        loadSlot<Int>(indexSlot)                                   // stack: [result, index]
+        visitLdcInsn(1)                                            // stack: [result, index, 1]
+        visitInsn(Opcodes.IADD)                                    // stack: [result, index + 1]
+        visitInsn(Opcodes.DUP)                                     // stack: [result, index + 1, index + 1]
+        saveToSlot<Int>(indexSlot)                                 // index = index + 1; stack: [result, index]
+        loadSlot<Int>(lengthSlot)                                  // stack: [result, index, length]
+        visitJumpInsn(Opcodes.IF_ICMPLT, loopStartLabel)           // if (index < length) goto loopStart; stack: [result]
 
         visitLabel(doneLabel)
-        loadSlot<Int>(endSlot)                                  // stack: [result, end]
-        loadIndex<ReadContext>()                                // stack: [result, end, context.index]
+        loadSlot<Int>(endSlot)                                     // stack: [result, end]
+        loadIndex<ReadContext>()                                   // stack: [result, end, context.index]
         val badDataLabel = Label()
-        visitJumpInsn(Opcodes.IF_ICMPNE, badDataLabel)          // if (end != context.index) goto badData; stack: [result]
+        visitJumpInsn(Opcodes.IF_ICMPNE, badDataLabel)             // if (end != context.index) goto badData; stack: [result]
         ret(klass)
 
         visitLabel(badDataLabel)
         loadThis()
-        callVirtual0<Void>(className, "throwBadDataLengthError")
+        callVirtual0<Void>(classType, "throwBadDataLengthError")
         ret(klass)
 
         visitMaxs(5, 6)

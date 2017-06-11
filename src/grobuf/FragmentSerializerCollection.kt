@@ -3,16 +3,16 @@ package grobuf
 import grobuf.serializers.*
 
 private sealed class BuildState {
-    class Building(val className: String): BuildState()
-    class Built(val inst: Any, val requiredBuilders: List<String>): BuildState()
+    class Building(val classType: JVMType): BuildState()
+    class Built(val inst: Any, val requiredBuilders: List<JVMType>): BuildState()
     class Initialized(val inst: Any): BuildState()
 }
 
 internal class FragmentSerializerCollection {
-    private val serializers = mutableMapOf<String, BuildState>(
+    private val serializers = mutableMapOf<JVMType, BuildState>(
             String::class.jvmType to BuildState.Initialized(StringSerializer())
     )
-    private val serializerToTypeMap = mutableMapOf<String, String>()
+    private val serializerToTypeMap = mutableMapOf<JVMType, JVMType>()
 
     init {
         serializers.forEach { type, writer ->
@@ -20,12 +20,12 @@ internal class FragmentSerializerCollection {
         }
     }
 
-    fun getFragmentSerializerType(klass: Class<*>): String {
+    fun getFragmentSerializerType(klass: Class<*>): JVMType {
         val canonicalName = klass.jvmType
         val buildState = serializers[canonicalName]
         return when (buildState) {
             null -> getFragmentSerializer(klass)::class.jvmType
-            is BuildState.Building -> buildState.className
+            is BuildState.Building -> buildState.classType
             is BuildState.Built -> buildState.inst::class.jvmType
             is BuildState.Initialized -> buildState.inst::class.jvmType
         }
@@ -40,10 +40,12 @@ internal class FragmentSerializerCollection {
         when (state) {
             null -> {
                 val builder = getSerializerBuilder(klass)
-                serializers[type] = BuildState.Building(builder.className)
-                serializerToTypeMap[builder.className] = type
+                serializers[type] = BuildState.Building(builder.classType)
+                serializerToTypeMap[builder.classType] = type
                 val fragmentSerializer = builder.build()
-                serializers[type] = BuildState.Built(fragmentSerializer, builder.argumentsOfInitialize.map { serializerToTypeMap[it]!! })
+                serializers[type] = BuildState.Built(fragmentSerializer,
+                        builder.argumentsOfInitialize.map { serializerToTypeMap[it]!! }
+                )
                 initialize(type)
                 return fragmentSerializer
             }
@@ -65,11 +67,11 @@ internal class FragmentSerializerCollection {
         else -> ClassSerializerBuilder(this, klass)
     }
 
-    private fun initialize(type: String) {
+    private fun initialize(type: JVMType) {
         dfs(type, mutableSetOf())
     }
 
-    private fun dfs(type: String, visited: MutableSet<String>) {
+    private fun dfs(type: JVMType, visited: MutableSet<JVMType>) {
         visited.add(type)
         val state = serializers[type]
         when (state) {

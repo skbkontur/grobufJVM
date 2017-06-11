@@ -12,16 +12,16 @@ private object DynamicClassesLoader : ClassLoader() {
     }
 }
 
-internal abstract class ClassBuilder<out T>(val className: String,
-                                            val superClassType: String) {
+internal abstract class ClassBuilder<out T>(val classType: JVMType,
+                                            val superClassType: JVMType) {
 
-    private class Field(val name: String, val type: String, val value: Any?, val isLateinit: Boolean)
+    private class Field(val name: String, val type: JVMType, val value: Any?, val isLateinit: Boolean)
 
     private val fields = mutableListOf<Field>()
     protected val classWriter = ClassWriter(ClassWriter.COMPUTE_FRAMES)
 
     fun build(): T {
-        classWriter.visit(Opcodes.V1_6, Opcodes.ACC_PUBLIC, className, null, superClassType, null)
+        classWriter.visit(Opcodes.V1_6, Opcodes.ACC_PUBLIC, classType.name, null, superClassType.name, null)
 
         buildBody()
 
@@ -33,11 +33,11 @@ internal abstract class ClassBuilder<out T>(val className: String,
         val byteCode = classWriter.toByteArray()
 
         // TODO: debug output
-        val fos = FileOutputStream("$className.class")
+        val fos = FileOutputStream("${classType.name}.class")
         fos.write(byteCode)
         fos.close()
 
-        val builtClass = DynamicClassesLoader.loadClass(className, byteCode)
+        val builtClass = DynamicClassesLoader.loadClass(classType.name, byteCode)
         val createMethod = builtClass.getMethod("create", Array<Any?>::class.java)
         val arguments = fields
                 .filterNot { it.isLateinit }
@@ -51,10 +51,10 @@ internal abstract class ClassBuilder<out T>(val className: String,
 
     protected abstract fun buildBody()
 
-    protected fun defineField(name: String, type: String,
+    protected fun defineField(name: String, type: JVMType,
                               value: Any?, isLateinit: Boolean = false): Int {
         classWriter.visitField(Opcodes.ACC_PRIVATE or Opcodes.ACC_FINAL, name,
-                type.toJVMSignature(), null, null)
+                type.signature, null, null)
                 .visitEnd()
         fields += Field(name, type, value, isLateinit)
         return fields.size - 1
@@ -67,7 +67,7 @@ internal abstract class ClassBuilder<out T>(val className: String,
     protected fun MethodVisitor.loadField(fieldId: Int) {
         val field = fields[fieldId]
         loadThis()
-        visitFieldInsn(Opcodes.GETFIELD, className, field.name, field.type.toJVMSignature())
+        visitFieldInsn(Opcodes.GETFIELD, classType.name, field.name, field.type.signature)
     }
 
     protected fun MethodVisitor.genSwitch(keys: List<Long>, valueSlot: Int,
@@ -101,23 +101,23 @@ internal abstract class ClassBuilder<out T>(val className: String,
     private fun initFields(method: MethodVisitor, fields: List<Field>) = with(method) {
         fields.forEachIndexed { index, field ->
             loadThis()                                       // stack: [this]
-            loadSlot<Array<Any?>>(1)                          // stack: [this, args]
+            loadSlot<Array<Any?>>(1)                         // stack: [this, args]
             visitLdcInsn(index)                              // stack: [this, args, index]
             visitInsn(Opcodes.AALOAD)                        // stack: [this, args[index]]
             castObjectTo(field.type)                         // stack: [this, (fieldType)args[index]]
-            visitFieldInsn(Opcodes.PUTFIELD, className,
-                    field.name, field.type.toJVMSignature()) // this.field = (fieldType)args[index]; stack: []
+            visitFieldInsn(Opcodes.PUTFIELD, classType.name,
+                    field.name, field.type.signature)        // this.field = (fieldType)args[index]; stack: []
         }
     }
 
     private fun buildCreateMethod() {
-        classWriter.visitMethod(Opcodes.ACC_PUBLIC or Opcodes.ACC_STATIC, "create",
-                "([Ljava/lang/Object;)L$className;", null, null).run {
-            visitTypeInsn(Opcodes.NEW, className) // stack: [new ClassName() => inst]
-            visitInsn(Opcodes.DUP)                // stack: [inst, inst]
-            loadSlot<Array<Any?>>(0)               // stack: [inst, inst, args]
-            ctorCall1<Array<Any?>>(className)     // inst.<init>(args); stack: [inst]
-            ret<Any>()                            // return inst; stack: []
+        classWriter.defineMethod(Opcodes.ACC_PUBLIC or Opcodes.ACC_STATIC, "create",
+                listOf(Array<Any?>::class.jvmType), classType).run {
+            visitTypeInsn(Opcodes.NEW, classType.name) // stack: [new ClassName() => inst]
+            visitInsn(Opcodes.DUP)                     // stack: [inst, inst]
+            loadSlot<Array<Any?>>(0)                   // stack: [inst, inst, args]
+            ctorCall1<Array<Any?>>(classType)          // inst.<init>(args); stack: [inst]
+            ret<Any>()                                 // return inst; stack: []
             visitMaxs(3, 1)
             visitEnd()
         }
