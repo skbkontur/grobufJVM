@@ -200,6 +200,7 @@ open class SerializerImpl: Serializer {
         return context.result
     }
 
+    // TODO: do not return null.
     override fun <T : Any> deserialize(klass: Class<T>, data: ByteArray): T {
         @Suppress("UNCHECKED_CAST")
         val fragmentSerializer = collection.getFragmentSerializer(klass) as FragmentSerializer<T>
@@ -632,7 +633,9 @@ internal sealed class BuildState {
 }
 
 internal class FragmentSerializerCollection {
-    private val serializers = mutableMapOf<String, BuildState>()
+    private val serializers = mutableMapOf<String, BuildState>(
+            String::class.jvmType to BuildState.Initialized(StringSerializer())
+    )
     private val serializerToTypeMap = mutableMapOf<String, String>()
 
     init {
@@ -1395,7 +1398,7 @@ fun zzz6(x: Long) : Any { return x }
 fun zzz7(x: Float) : Any { return x }
 fun zzz8(x: Double) : Any { return x }
 
-data class A(/*@JvmField val b: B?, */@JvmField var x: Int, @JvmField var y: Int)
+data class A(/*@JvmField val b: B?, */@JvmField var x: Int, @JvmField var y: Int, @JvmField var s: String?)
 
 class B(@JvmField var a: A, @JvmField var x: Int)
 
@@ -1428,7 +1431,7 @@ fun main(args: Array<String>) {
     val fragmentSerializerCollection = FragmentSerializerCollection()
     val serializer = fragmentSerializerCollection.getFragmentSerializer<B>()
     val context = WriteContext()
-    val obj = B(A(42, 117), -1)
+    val obj = B(A(42, 117, "zzz"), -1)
     val size = serializer.countSize(context, obj)
     println(size)
     val arr = ByteArray(size)
@@ -1441,6 +1444,7 @@ fun main(args: Array<String>) {
     println(readB2.x)
     println(readB2.a!!.x)
     println(readB2.a!!.y)
+    println(readB2.a!!.s)
     val serializer3 = fragmentSerializerCollection.getFragmentSerializer<IntArray>()
     val size3 = serializer3.countSize(context, intArrayOf(1, 2, 3))
     val arr3 = ByteArray(size3)
@@ -1452,15 +1456,16 @@ fun main(args: Array<String>) {
     println(readArr.contentToString())
 
     val serializer4 = fragmentSerializerCollection.getFragmentSerializer<Array<A>>()
-    val size4 = serializer4.countSize(context, arrayOf(A(42, 117), A(-1, 314)))
+    val size4 = serializer4.countSize(context, arrayOf(A(42, 117, "zzz"), A(-1, 314, "qxx")))
     val arr4 = ByteArray(size4)
     context.index = 0
     context.result = arr4
-    serializer4.write(context, arrayOf(A(42, 117), A(-1, 314)))
+    serializer4.write(context, arrayOf(A(42, 117, "zzz"), A(-1, 314, "qxx")))
     println(arr4.contentToString())
     val readArr4 = serializer4.read(ReadContext().also { it.data = arr4; it.index = 0 })
     println(readArr4.contentToString())
 
+    //test3()
 }
 
 class Z(val x: Int)
@@ -1503,6 +1508,74 @@ fun test2() {
 
         for (i in 0..size - 1 step 4)
             unsafe.putInt(startIndex + i, i)
+        val elapsed = (System.nanoTime() - time).toDouble() / 1000
+        //println(buf[7])
+        println(elapsed)
+    }
+}
+
+internal class StringSerializer: FragmentSerializer<String?>() {
+
+    private val stringValueOffset = unsafe.objectFieldOffset(String::class.java.getDeclaredField("value"))
+
+    override fun countSize(context: WriteContext, obj: String?) =
+            if (obj == null) 1
+            else 1 /* typeCode */ + 4 /* length */ + obj.length * 2
+
+    override fun write(context: WriteContext, obj: String?) {
+        if (obj == null) {
+            writeByteSafe(context.result, context.index, GroBufTypeCode.Empty.value)
+            context.index++
+            return
+        }
+        writeByteSafe(context.result, context.index, GroBufTypeCode.String.value)
+        context.index++
+        writeIntSafe(context.result, context.index, obj.length * 2)
+        context.index += 4
+        writeCharArraySafe(context.result, context.index, unsafe.getObject(obj, stringValueOffset) as CharArray)
+        context.index += obj.length * 2
+    }
+
+    override fun read(context: ReadContext): String? {
+        val typeCode = readByteSafe(context.data, context.index)
+        context.index++
+        if (typeCode == GroBufTypeCode.Empty.value)
+            return null
+        if (typeCode != GroBufTypeCode.String.value) {
+            skipValue(typeCode.toInt(), context)
+            return null
+        }
+        val length = readIntSafe(context.data, context.index)
+        context.index += 4
+        val arr = CharArray(length / 2)
+        readCharArraySafe(arr, context.index, context.data)
+        context.index += length
+        val str = createInstance(String::class.java) as String
+        unsafe.putObject(str, stringValueOffset, arr)
+        return str
+    }
+}
+
+fun test3() {
+//    val arr = ByteArray(size)
+//    val zzz = unsafe.arrayBaseOffset(arr::class.java)
+//    unsafe.copyMemory(null, startIndex, arr, zzz.toLong(), size.toLong())
+//    for (i in 0..10)
+//        println(arr[i])
+    val str = "as;ldkfjalsdkjf;laskjdfsldfjkals;dkjfla;ksjdflasjdf;lkjasdf;ljasdf;lkjasd;lfjkasdf"
+    val serializer = StringSerializer()
+    val writeContext = WriteContext()
+    val size = serializer.countSize(writeContext, str)
+    writeContext.result = kotlin.ByteArray(size)
+    serializer.write(writeContext, str)
+    val readContext = ReadContext().also { it.data = writeContext.result }
+    println(serializer.read(readContext))
+    for (j in 0..10000) {
+        val time = System.nanoTime()
+        for (i in 0..10000) {
+            readContext.index = 0
+            serializer.read(readContext)
+        }
         val elapsed = (System.nanoTime() - time).toDouble() / 1000
         //println(buf[7])
         println(elapsed)
