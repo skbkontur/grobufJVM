@@ -185,66 +185,25 @@ open class SerializerImpl: Serializer {
 
     private val collection = FragmentSerializerCollection()
 
-    private val unsafe: Unsafe
-    init {
-        val theUnsafe: Field = Unsafe::class.java.getDeclaredField("theUnsafe")
-        theUnsafe.isAccessible = true
-        unsafe = theUnsafe.get(null) as Unsafe
-    }
-
-    private fun getDefault(klass: Class<*>): Any {
-        return when (klass) {
-            Byte::class.java -> 0.toByte()
-            Short::class.java -> 0.toShort()
-            Int::class.java -> 0
-            Long::class.java -> 0L
-            Boolean::class.java -> false
-            Char::class.java -> 0.toChar()
-            Float::class.java -> 0.0f
-            Double::class.java -> 0.0
-            else -> throw IllegalStateException("$klass is not a primitive")
-        }
-    }
-
-    private fun createArray(klass: Class<*>): Any {
-        return when (klass) {
-            Byte::class.java -> ByteArray(0)
-            Short::class.java -> ShortArray(0)
-            Int::class.java -> IntArray(0)
-            Long::class.java -> LongArray(0)
-            Boolean::class.java -> BooleanArray(0)
-            Char::class.java -> CharArray(0)
-            Float::class.java -> FloatArray(0)
-            Double::class.java -> DoubleArray(0)
-            else -> arrayOfNulls<Any>(0)
-        }
-    }
-
     override fun <T> getSize(klass: Class<T>, obj: T): Int {
         @Suppress("UNCHECKED_CAST")
-        return (collection.getFragmentSerializer(klass) as FragmentSerializer<T>).countSize(obj, WriteContext())
+        return (collection.getFragmentSerializer(klass) as FragmentSerializer<T>).countSize(WriteContext(), obj)
     }
 
     override fun <T> serialize(klass: Class<T>, obj: T): ByteArray {
         @Suppress("UNCHECKED_CAST")
         val fragmentSerializer = collection.getFragmentSerializer(klass) as FragmentSerializer<T>
         val context = WriteContext()
-        val size = fragmentSerializer.countSize(obj, context)
+        val size = fragmentSerializer.countSize(context, obj)
         context.result = ByteArray(size)
-        fragmentSerializer.write(obj, context)
+        fragmentSerializer.write(context, obj)
         return context.result
     }
 
     override fun <T : Any> deserialize(klass: Class<T>, data: ByteArray): T {
         @Suppress("UNCHECKED_CAST")
         val fragmentSerializer = collection.getFragmentSerializer(klass) as FragmentSerializer<T>
-        val prev = when {
-            klass.isPrimitive -> getDefault(klass)
-            klass.isArray -> createArray(klass.componentType!!)
-            else -> unsafe.allocateInstance(klass)
-        }
-        @Suppress("UNCHECKED_CAST")
-        return fragmentSerializer.read(prev as T, ReadContext().also { it.data = data; it.index = 0 })
+        return fragmentSerializer.read(ReadContext().also { it.data = data; it.index = 0 })
     }
 }
 
@@ -274,9 +233,9 @@ private val doubleArrayDataOffset  = unsafe.arrayBaseOffset(DoubleArray::class.j
 
 @Suppress("unused")
 internal abstract class FragmentSerializer<T> {
-    abstract fun countSize(obj: T, context: WriteContext): Int
-    abstract fun write(obj: T, context: WriteContext)
-    abstract fun read(prev: T, context: ReadContext): T
+    abstract fun countSize(context: WriteContext, obj: T): Int
+    abstract fun write(context: WriteContext, obj: T)
+    abstract fun read(context: ReadContext): T
 
     protected fun checkTypeCode(typeCode: Int) {
         if (GroBufTypeCode.lengths[typeCode] == 0)
@@ -765,7 +724,7 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
                                                       protected val klass: Class<*>)
     : ClassBuilder<FragmentSerializer<*>>(
         className      = "${klass.jvmType.toJVMIdentifier()}_Serializer",
-        superClassType = "grobuf/FragmentSerializer") {
+        superClassType = FragmentSerializer::class.jvmType) {
 
     override fun buildBody() {
         buildCountMethod()
@@ -774,11 +733,11 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
     }
 
     protected fun MethodVisitor.loadObj() {
-        loadSlot(klass, 1)
+        loadSlot(klass, 2)
     }
 
     protected fun MethodVisitor.loadContext() {
-        loadSlot<Any>(2 + if (klass.occupiesTwoSlots) 1 else 0)
+        loadSlot<Any>(1 + if (klass.occupiesTwoSlots) 1 else 0)
     }
 
     //---------- Writing -------------------------------------------------------//
@@ -832,7 +791,7 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
 
     private fun buildCountMethod() {
         classWriter.defineMethod(Opcodes.ACC_PUBLIC, "countSize",
-                listOf(klass, WriteContext::class.java), Int::class.java).run {
+                listOf(WriteContext::class.java, klass), Int::class.java).run {
             if (klass.isReference) {
                 loadObj()                                      // stack: [obj]
                 val notNullLabel = Label()
@@ -848,8 +807,8 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
             buildBridge(
                     name          = "countSize",
                     argumentTypes = listOf(
-                            klass.erased(),
-                            WriteContext::class.java.notErased()
+                            WriteContext::class.java.notErased(),
+                            klass.erased()
                     ),
                     returnType    = Int::class.java.notErased()
             )
@@ -860,7 +819,7 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
 
     private fun buildWriteMethod() {
         classWriter.defineMethod(Opcodes.ACC_PUBLIC, "write",
-                        listOf(klass, WriteContext::class.java), Void::class.java).run {
+                        listOf(WriteContext::class.java, klass), Void::class.java).run {
             if (klass.isReference) {
                 loadObj()                                                    // stack: [obj]
                 val notNullLabel = Label()
@@ -876,8 +835,8 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
             buildBridge(
                     name          = "write",
                     argumentTypes = listOf(
-                            klass.erased(),
-                            WriteContext::class.java.notErased()
+                            WriteContext::class.java.notErased(),
+                            klass.erased()
                     ),
                     returnType    = Void::class.java.notErased()
             )
@@ -913,10 +872,24 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
     }
 
     protected fun MethodVisitor.getTypeCodeSlot() =
-            3 + if (klass.occupiesTwoSlots) 1 else 0
+            2 + if (klass.occupiesTwoSlots) 1 else 0
 
     protected fun MethodVisitor.loadTypeCode() {
         loadSlot<Int>(getTypeCodeSlot())
+    }
+
+    protected fun MethodVisitor.loadDefault(klass: Class<*>) {
+        when (klass.jvmPrimitiveType) {
+            JVMPrimitive.Byte,
+            JVMPrimitive.Short,
+            JVMPrimitive.Int,
+            JVMPrimitive.Char,
+            JVMPrimitive.Boolean -> visitLdcInsn(0)
+            JVMPrimitive.Long -> visitLdcInsn(0L)
+            JVMPrimitive.Float -> visitLdcInsn(0.0f)
+            JVMPrimitive.Double -> visitLdcInsn(0.0)
+            else -> visitInsn(Opcodes.ACONST_NULL)
+        }
     }
 
     protected fun MethodVisitor.assertTypeCode(expectedTypeCode: GroBufTypeCode) {
@@ -928,8 +901,7 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
         loadTypeCode()                                               // stack: [this, typeCode]
         loadContext()                                                // stack: [this, typeCode, context]
         callVirtual2<Int, ReadContext, Void>(className, "skipValue") // this.skipValue(typeCode, context)]
-        // TODO: may be it is more logical to return default value?
-        loadObj()
+        loadDefault(klass)
         ret(klass)
 
         visitLabel(okLabel)
@@ -937,24 +909,15 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
 
     private fun buildReadMethod() {
         classWriter.defineMethod(Opcodes.ACC_PUBLIC, "read",
-                listOf(klass, ReadContext::class.java), klass).run {
+                listOf(ReadContext::class.java), klass).run {
             readSafe<Byte>()                                    // stack: [this.readByteSafe(context.data, context.index) => typeCode]
             visitInsn(Opcodes.DUP)                              // stack: [typeCode, typeCode]
             saveToSlot<Int>(getTypeCodeSlot())                  // slot_3 = typeCode; stack: [typeCode]
             val notEmptyLabel = Label()
             visitLdcInsn(GroBufTypeCode.Empty.value)            // stack: [typeCode, Empty]
             visitJumpInsn(Opcodes.IF_ICMPNE, notEmptyLabel)     // if (type != Empty) goto notEmpty; stack: []
-            when (klass.jvmPrimitiveType) {
-                JVMPrimitive.Byte,
-                JVMPrimitive.Short,
-                JVMPrimitive.Int,
-                JVMPrimitive.Char,
-                JVMPrimitive.Boolean -> visitLdcInsn(0)
-                JVMPrimitive.Long -> visitLdcInsn(0L)
-                JVMPrimitive.Float -> visitLdcInsn(0.0f)
-                JVMPrimitive.Double -> visitLdcInsn(0.0)
-                else -> visitInsn(Opcodes.ACONST_NULL)
-            }
+
+            loadDefault(klass)
             ret(klass)                                          // return default(type); stack: []
 
             visitLabel(notEmptyLabel)
@@ -969,7 +932,6 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
             buildBridge(
                     name          = "read",
                     argumentTypes = listOf(
-                            klass.erased(),
                             ReadContext::class.java.notErased()
                     ),
                     returnType    = klass.erased()
@@ -1030,7 +992,7 @@ internal class PrimitivesSerializerBuilder(fragmentSerializerCollection: Fragmen
         // TODO: Coercion between primitives.
         readSafe(klass) // stack: [this.read<type>Safe(result, index)]
         ret(klass)      // return this.read<type>Safe(result, index); stack: []
-        visitMaxs(3, 4)
+        visitMaxs(3, 3)
     }
 }
 
@@ -1057,8 +1019,9 @@ internal class PrimitivesArraySerializerBuilder(fragmentSerializerCollection: Fr
         visitInsn(Opcodes.ARRAYLENGTH)                                                   // stack: [obj.length]
         visitLdcInsn(elementJvmPrimitiveType.size)                                       // stack: [obj.length, elementSize]
         visitInsn(Opcodes.IMUL)                                                          // stack: [obj.length * elementSize]
-        saveToSlot<Int>(3)                                                               // length <= slot_3 = obj.length * elementSize
-        writeSafe<Int> { loadSlot<Int>(3) }                                              // this.writeIntSafe(result, index, length]; stack: []
+        val lengthSlot = 3
+        saveToSlot<Int>(lengthSlot)                                                      // length = obj.length * elementSize
+        writeSafe<Int> { loadSlot<Int>(lengthSlot) }                                     // this.writeIntSafe(result, index, length]; stack: []
 
         loadThis()                                                                       // stack: [this]
         loadResult()                                                                     // stack: [this, result]
@@ -1066,7 +1029,7 @@ internal class PrimitivesArraySerializerBuilder(fragmentSerializerCollection: Fr
         loadObj()                                                                        // stack: [this, result, index, obj]
         callVirtual(className, "write${elementJvmPrimitiveType}ArraySafe",
                 listOf(ByteArray::class.java, Int::class.java, klass), Void::class.java) // this.writeArray(result, index, obj); stack: []
-        increaseIndexBy<WriteContext> { loadSlot<Int>(3) }                               // index += length; stack: []
+        increaseIndexBy<WriteContext> { loadSlot<Int>(lengthSlot) }                      // index += length; stack: []
 
         ret<Void>()
         visitMaxs(4, 4)
@@ -1076,54 +1039,59 @@ internal class PrimitivesArraySerializerBuilder(fragmentSerializerCollection: Fr
         assertTypeCode(klass.groBufTypeCode)
         readSafe<Int>()                                                                  // stack: [*(int*)data[index] => length]
         visitInsn(Opcodes.DUP)                                                           // stack: [length, length]
-        saveToSlot<Int>(4)                                                               // slot_4 = length; stack: [length]
+        val lengthSlot = 3
+        saveToSlot<Int>(lengthSlot)                                                      // stack: [length]
         visitLdcInsn(elementJvmPrimitiveType.size)                                       // stack: [length, elementSize]
         visitInsn(Opcodes.IDIV)                                                          // stack: [length / elementSize => arrayLength]
         visitIntInsn(Opcodes.NEWARRAY, elementJvmPrimitiveType.typeAsArrayElement)       // stack: [new <elementType>Array[arrayLength] => result]
-        saveToSlot<Any>(5)                                                               // slot_5 = result; stack: []
+        val resultSlot = 4
+        saveToSlot<Any>(resultSlot)                                                      // stack: []
 
         loadThis()                                                                       // stack: [this]
-        loadSlot<Any>(5)                                                                 // stack: [this, result]
+        loadSlot<Any>(resultSlot)                                                        // stack: [this, result]
         loadIndex<ReadContext>()                                                         // stack: [this, result, index]
         loadData()                                                                       // stack: [this, result, index, data]
         callVirtual(className, "read${elementJvmPrimitiveType}ArraySafe",
                 listOf(klass, Int::class.java, ByteArray::class.java), Void::class.java) // this.readArray(result, index, obj); stack: []
-        increaseIndexBy<ReadContext> { loadSlot<Int>(4) }                                // index += length; stack: []
+        increaseIndexBy<ReadContext> { loadSlot<Int>(lengthSlot) }                       // index += length; stack: []
 
-        loadSlot<Any>(5)
+        loadSlot<Any>(resultSlot)
         ret(klass)
-        visitMaxs(4, 6)
+        visitMaxs(4, 5)
     }
 }
 
 internal class ClassSerializerBuilder(fragmentSerializerCollection: FragmentSerializerCollection, klass: Class<*>)
     : FragmentSerializerBuilderBase(fragmentSerializerCollection, klass) {
 
+    private val klassField by lazy { defineField("klass", klass::class.jvmType, klass) }
+
     override fun MethodVisitor.countSizeNotNull() {
         visitLdcInsn(1 /* typeCode */ + 4 /* length */)                         // stack: [5 => size]
         klass.appropriateFields.forEach {
             val fieldSerializerType = fragmentSerializerCollection.getFragmentSerializerType(it.type)
             val fieldVisitedLabel = Label()
+            val fieldSlot = 3
             if (it.type.isReference) {
                 loadObj()                                                       // stack: [size, obj]
                 visitFieldInsn(Opcodes.GETFIELD, klass.jvmType,
                         it.name, it.type.jvmSignature)                          // stack: [size, obj.field]
                 visitInsn(Opcodes.DUP)                                          // stack: [size, obj.field, obj.field]
-                saveToSlot<Any>(3)                                              // slot_3 = obj.field; stack: [size, obj.field]
+                saveToSlot<Any>(fieldSlot)                                      // field = obj.field; stack: [size, obj.field]
                 visitJumpInsn(Opcodes.IFNULL, fieldVisitedLabel)                // if (obj.field == null) goto fieldVisited; stack: [size]
             }
             loadField(getSerializerField(fieldSerializerType))                  // stack: [size, fieldSerializer]
+            loadContext()                                                       // stack: [size, fieldSerializer, context]
             if (it.type.isReference)
-                loadSlot<Any>(3)                                                // stack: [size, fieldSerializer, obj.field]
+                loadSlot<Any>(fieldSlot)                                        // stack: [size, fieldSerializer, context, obj.field]
             else {
-                loadObj()                                                       // stack: [size, fieldSerializer, obj]
+                loadObj()                                                       // stack: [size, fieldSerializer, context, obj]
                 visitFieldInsn(Opcodes.GETFIELD, klass.jvmType,
-                        it.name, it.type.jvmSignature)                          // stack: [size, fieldSerializer, obj.field]
+                        it.name, it.type.jvmSignature)                          // stack: [size, fieldSerializer, context, obj.field]
             }
-            loadContext()                                                       // stack: [size, fieldSerializer, obj.field, context]
             callVirtual(fieldSerializerType, "countSize",
-                    listOf(it.type, WriteContext::class.java), Int::class.java) // stack: [size, fieldSerializer.countSize(obj.field, context)]
-            visitInsn(Opcodes.IADD)                                             // stack: [size + fieldSerializer.countSize(obj.field, context) => size]
+                    listOf(WriteContext::class.java, it.type), Int::class.java) // stack: [size, fieldSerializer.countSize(context, obj.field)]
+            visitInsn(Opcodes.IADD)                                             // stack: [size + fieldSerializer.countSize(context, obj.field) => size]
             visitLdcInsn(8)                                                     // stack: [size, 8]
             visitInsn(Opcodes.IADD)                                             // stack: [size + 8 => size]
             visitLabel(fieldVisitedLabel)
@@ -1135,39 +1103,41 @@ internal class ClassSerializerBuilder(fragmentSerializerCollection: FragmentSeri
     override fun MethodVisitor.writeNotNull() {
         writeSafe<Byte> { visitLdcInsn(GroBufTypeCode.Object.value) }            // this.writeByteSafe(result, index, Object]; stack: []
         loadIndex<WriteContext>()                                                // stack: [index]
-        saveToSlot<Int>(3)                                                       // start <= slot_3 = index; stack: []
+        val startSlot = 3
+        saveToSlot<Int>(startSlot)                                               // start = index; stack: []
         increaseIndexBy<WriteContext>(4)                                         // index += 4; stack: []
         klass.appropriateFields.forEach {
             val fieldSerializerType = fragmentSerializerCollection.getFragmentSerializerType(it.type)
             val fieldVisitedLabel = Label()
+            val fieldSlot = 4
             if (it.type.isReference) {
                 loadObj()                                                        // stack: [obj]
                 visitFieldInsn(Opcodes.GETFIELD, klass.jvmType,
                         it.name, it.type.jvmSignature)                           // stack: [obj.field]
                 visitInsn(Opcodes.DUP)                                           // stack: [obj.field, obj.field]
-                saveToSlot<Any>(4)                                               // slot_3 = obj.field; stack: [obj.field]
+                saveToSlot<Any>(fieldSlot)                                       // field = obj.field; stack: [obj.field]
                 visitJumpInsn(Opcodes.IFNULL, fieldVisitedLabel)                 // if (obj.field == null) goto fieldVisited; stack: []
             }
             writeSafe<Long> { visitLdcInsn(HashCalculator.calcHash(it.name)) }   // writeLongSafe(calcHash(fieldName)); stack: []
             loadField(getSerializerField(fieldSerializerType))                   // stack: [fieldSerializer]
+            loadContext()                                                        // stack: [fieldSerializer, context]
             if (it.type.isReference)
-                loadSlot<Any>(4)                                                 // stack: [fieldSerializer, obj.field]
+                loadSlot<Any>(fieldSlot)                                         // stack: [fieldSerializer, context, obj.field]
             else {
-                loadObj()                                                        // stack: [fieldSerializer, obj]
+                loadObj()                                                        // stack: [fieldSerializer, context, obj]
                 visitFieldInsn(Opcodes.GETFIELD, klass.jvmType,
-                        it.name, it.type.jvmSignature)                           // stack: [fieldSerializer, obj.field]
+                        it.name, it.type.jvmSignature)                           // stack: [fieldSerializer, context, obj.field]
             }
-            loadContext()                                                        // stack: [fieldSerializer, obj.field, context]
             callVirtual(fieldSerializerType, "write",
-                    listOf(it.type, WriteContext::class.java), Void::class.java) // fieldSerializer.write(obj.field, context); stack: []
+                    listOf(WriteContext::class.java, it.type), Void::class.java) // fieldSerializer.write(context, obj.field); stack: []
             visitLabel(fieldVisitedLabel)
         }
 
         loadThis()                                                               // stack: [this]
         loadResult()                                                             // stack: [this, result]
-        loadSlot<Int>(3)                                                         // stack: [this, result, start]
+        loadSlot<Int>(startSlot)                                                 // stack: [this, result, start]
         loadIndex<WriteContext>()                                                // stack: [this, result, start, index]
-        loadSlot<Int>(3)                                                         // stack: [this, result, start, index, start]
+        loadSlot<Int>(startSlot)                                                 // stack: [this, result, start, index, start]
         visitLdcInsn(4)                                                          // stack: [this, result, start, index, start, 4]
         visitInsn(Opcodes.IADD)                                                  // stack: [this, result, start, index, start + 4]
         visitInsn(Opcodes.ISUB)                                                  // stack: [this, result, start, index - start - 4 => length]
@@ -1182,113 +1152,64 @@ internal class ClassSerializerBuilder(fragmentSerializerCollection: FragmentSeri
                 .map { it to HashCalculator.calcHash(it.name) }
                 .sortedBy { it.second }
         assertTypeCode(GroBufTypeCode.Object)
-        readSafe<Int>()                                                      // stack: [length]
-        visitInsn(Opcodes.DUP)                                               // stack: [length, length]
+
+        val parameterlessConstructor = klass.constructors.firstOrNull { it.parameterCount == 0 }
+        if (parameterlessConstructor != null) {
+            visitTypeInsn(Opcodes.NEW, klass.jvmType)                // stack: [new klass() => result]
+            visitInsn(Opcodes.DUP)                                   // stack: [result, result]
+            ctorCall0(klass.jvmType)                                 // inst.<init>(); stack: [result]
+        } else {
+            loadThis()                                               // stack: [this]
+            loadField(klassField)                                    // stack: [this, klass]
+            callVirtual1<Class<*>, Any>(className, "createInstance") // stack: [this.createInstance(klass)]
+            castObjectTo(klass.jvmType)                              // stack: [(klass)this.createInstance(klass) => result]
+        }
+
+        readSafe<Int>()                                              // stack: [result, length]
+        visitInsn(Opcodes.DUP)                                       // stack: [result, length, length]
         val emptyLabel = Label()
-        visitJumpInsn(Opcodes.IFEQ, emptyLabel)                              // if (length == 0) goto empty; stack: [length]
-        loadIndex<ReadContext>()                                             // stack: [length, index]
-        visitInsn(Opcodes.IADD)                                              // stack: [length + index]
-        // TODO: refactor slots access.
-        saveToSlot<Int>(1 + getTypeCodeSlot())                               // end <= slot_4 = length + index; stack: []
+        visitJumpInsn(Opcodes.IFEQ, emptyLabel)                      // if (length == 0) goto empty; stack: [result, length]
+        loadIndex<ReadContext>()                                     // stack: [result, length, index]
+        visitInsn(Opcodes.IADD)                                      // stack: [result, length + index]
+        val endSlot = 1 + getTypeCodeSlot()
+        saveToSlot<Int>(endSlot)                                     // end = length + index; stack: [result]
 
         val loopStartLabel = Label()
         val loopEndLabel = Label()
         visitLabel(loopStartLabel)
-        readSafe<Long>()                                                     // stack: [hashCode]
-        saveToSlot<Long>(2 + getTypeCodeSlot())                              // slot_5 = hashCode; stack: []
+        readSafe<Long>()                                             // stack: [*(long*)data[index]]
+        val hashCodeSlot = 2 + getTypeCodeSlot()
+        saveToSlot<Long>(hashCodeSlot)                               // hashCode = *(long*)data[index]; stack: []
         val defaultLabel = Label()
-        genSwitch(fields.map { it.second }, 2 + getTypeCodeSlot(), defaultLabel) {
+        genSwitch(fields.map { it.second }, hashCodeSlot, defaultLabel) {
             val field = fields[it].first
             val fieldSerializerType = fragmentSerializerCollection.getFragmentSerializerType(field.type)
-            loadObj()                                                        // stack: [obj]
-            loadField(getSerializerField(fieldSerializerType))               // stack: [obj, fieldSerializer]
-            loadObj()                                                        // stack: [obj, fieldSerializer, obj]
-            visitFieldInsn(Opcodes.GETFIELD, klass.jvmType,
-                    field.name, field.type.jvmSignature)                     // stack: [obj, fieldSerializer, obj.field]
-            if (field.type.isReference) {
-                visitInsn(Opcodes.DUP)                                       // stack: [obj, fieldSerializer, obj.field, obj.field]
-                val notNullLabel = Label()
-                visitJumpInsn(Opcodes.IFNONNULL, notNullLabel)               // if (obj.field != null) goto notNull; stack: [obj, fieldSerializer, obj.field]
-                visitInsn(Opcodes.POP)                                       // stack: [obj, fieldSerializer]
-                val parameterlessConstructor = field.type.constructors.firstOrNull { it.parameterCount == 0 }
-                if (parameterlessConstructor != null) {
-                    visitTypeInsn(Opcodes.NEW, field.type.jvmType)           // stack: [obj, fieldSerializer, new fieldType() => inst]
-                    visitInsn(Opcodes.DUP)                                   // stack: [obj, fieldSerializer, inst, inst]
-                    ctorCall0(field.type.jvmType)                            // inst.<init>(); stack: [obj, fieldSerializer, inst]
-                } else {
-                    loadThis()                                               // stack: [obj, fieldSerializer, this]
-                    loadField(getFieldTypeField(field.type))                 // stack: [obj, fieldSerializer, this, this.fieldType]
-                    callVirtual1<Class<*>, Any>(className, "createInstance") // stack: [obj, fieldSerializer, this.createInstance(this.fieldType)]
-                    castObjectTo(field.type.jvmType)                         // stack: [obj, fieldSerializer, (fieldType)this.createInstance(this.fieldType)]
-                }
-                visitLabel(notNullLabel)
-                //visitFrame(Opcodes.F_NEW, 3, arrayOf(className, klass.jvmType, ReadContext::class.java.jvmType), 3, arrayOf(klass.jvmType, fieldSerializerType, it.type.jvmType))
-            }
-            loadContext()                                                    // stack: [obj, fieldSerializer, obj.field, context]
+            visitInsn(Opcodes.DUP)                                   // stack: [result, result]
+            loadField(getSerializerField(fieldSerializerType))       // stack: [result, result, fieldSerializer]
+            loadContext()                                            // stack: [result, result, fieldSerializer, context]
             callVirtual(fieldSerializerType, "read",
-                    listOf(field.type, ReadContext::class.java), field.type) // stack: [obj, fieldSerializer.read(obj.field, context)]
+                    listOf(ReadContext::class.java), field.type)     // stack: [result, result, fieldSerializer.read(context)]
             visitFieldInsn(Opcodes.PUTFIELD, klass.jvmType,
-                    field.name, field.type.jvmSignature)                     // obj.field = fieldSerializer.read(obj.field, context); stack: []
+                    field.name, field.type.jvmSignature)             // result.field = fieldSerializer.read(context); stack: [result]
             visitJumpInsn(Opcodes.GOTO, loopEndLabel)
         }
 
         visitLabel(defaultLabel)
-        loadThis()                                                           // stack: [this]
-        readSafe<Byte>()                                                     // stack: [this, *(byte*)data[index] => fieldTypeCode]
-        loadContext()                                                        // stack: [this, fieldTypeCode, context]
-        callVirtual2<Int, ReadContext, Void>(className, "skipValue")         // this.skipValue(fieldTypeCode, context); stack: []
+        loadThis()                                                   // stack: [result, this]
+        readSafe<Byte>()                                             // stack: [result, this, *(byte*)data[index] => fieldTypeCode]
+        loadContext()                                                // stack: [result, this, fieldTypeCode, context]
+        callVirtual2<Int, ReadContext, Void>(className, "skipValue") // this.skipValue(fieldTypeCode, context); stack: [result]
 
         visitLabel(loopEndLabel)
-        loadIndex<ReadContext>()                                             // stack: [index]
-        loadSlot<Int>(1 + getTypeCodeSlot())                                 // stack: [index, end]
-        visitJumpInsn(Opcodes.IF_ICMPLT, loopStartLabel)                     // if (index < end) goto loopStart; stack: []
-        loadObj()
-        ret(klass)
+        loadIndex<ReadContext>()                                     // stack: [result, index]
+        loadSlot<Int>(endSlot)                                       // stack: [result, index, end]
+        visitJumpInsn(Opcodes.IF_ICMPLT, loopStartLabel)             // if (index < end) goto loopStart; stack: [result]
+        ret(klass)                                                   // return result; stack: []
 
-        visitLabel(emptyLabel)
-        visitInsn(Opcodes.POP)
-        loadObj()
-        ret(klass)
-
+        visitLabel(emptyLabel)                                       // stack: [result, 0]
+        visitInsn(Opcodes.POP)                                       // stack: [result]
+        ret(klass)                                                   // return result; stack: []
         visitMaxs(4, 3 + getTypeCodeSlot())
-    }
-
-    private fun MethodVisitor.readNotNullOld() {
-        klass.appropriateFields.forEach {
-            val fieldSerializerType = fragmentSerializerCollection.getFragmentSerializerType(it.type)
-            loadObj()                                                        // stack: [obj]
-            loadField(getSerializerField(fieldSerializerType))               // stack: [obj, fieldSerializer]
-            loadObj()                                                        // stack: [obj, fieldSerializer, obj]
-            visitFieldInsn(Opcodes.GETFIELD, klass.jvmType,
-                    it.name, it.type.jvmSignature)                           // stack: [obj, fieldSerializer, obj.field]
-            if (it.type.isReference) {
-                visitInsn(Opcodes.DUP)                                       // stack: [obj, fieldSerializer, obj.field, obj.field]
-                val notNullLabel = Label()
-                visitJumpInsn(Opcodes.IFNONNULL, notNullLabel)               // if (obj.field != null) goto notNull; stack: [obj, fieldSerializer, obj.field]
-                visitInsn(Opcodes.POP)                                       // stack: [obj, fieldSerializer]
-                val parameterlessConstructor = it.type.constructors.firstOrNull { it.parameterCount == 0 }
-                if (parameterlessConstructor != null) {
-                    visitTypeInsn(Opcodes.NEW, it.type.jvmType)              // stack: [obj, fieldSerializer, new fieldType() => inst]
-                    visitInsn(Opcodes.DUP)                                   // stack: [obj, fieldSerializer, inst, inst]
-                    ctorCall0(it.type.jvmType)                               // inst.<init>(); stack: [obj, fieldSerializer, inst]
-                } else {
-                    loadThis()                                               // stack: [obj, fieldSerializer, this]
-                    loadField(getFieldTypeField(it.type))                    // stack: [obj, fieldSerializer, this, this.fieldType]
-                    callVirtual1<Class<*>, Any>(className, "createInstance") // stack: [obj, fieldSerializer, this.createInstance(this.fieldType)]
-                    castObjectTo(it.type.jvmType)                            // stack: [obj, fieldSerializer, (fieldType)this.createInstance(this.fieldType)]
-                }
-                visitLabel(notNullLabel)
-                //visitFrame(Opcodes.F_NEW, 3, arrayOf(className, klass.jvmType, ReadContext::class.java.jvmType), 3, arrayOf(klass.jvmType, fieldSerializerType, it.type.jvmType))
-            }
-            loadContext()                                                    // stack: [obj, fieldSerializer, obj.field, context]
-            callVirtual(fieldSerializerType, "read",
-                    listOf(it.type, ReadContext::class.java), it.type)       // stack: [obj, fieldSerializer.read(obj.field, context)]
-            visitFieldInsn(Opcodes.PUTFIELD, klass.jvmType,
-                    it.name, it.type.jvmSignature)                           // obj.field = fieldSerializer.read(obj.field, context); stack: []
-        }
-        loadObj()                                                            // stack: [obj]
-        ret(klass)                                                           // return obj; stack: []
-        visitMaxs(4, 4)
     }
 
     private val Class<*>.appropriateFields: List<java.lang.reflect.Field>
@@ -1301,12 +1222,7 @@ internal class ClassSerializerBuilder(fragmentSerializerCollection: FragmentSeri
         defineField("${type.toJVMIdentifier()}_serializer", type.toJVMType(), null, true)
     }
 
-    private fun getFieldTypeField(type: Class<*>) = fieldTypesFields.getOrPut(type) {
-        defineField("${type.jvmType.toJVMIdentifier()}_fieldType", type::class.java.jvmType, type)
-    }
-
     private val serializerFields = mutableMapOf<String, Int>()
-    private val fieldTypesFields = mutableMapOf<Class<*>, Int>()
 }
 
 fun zzz1(x: Byte) : Any { return x }
@@ -1352,27 +1268,26 @@ fun main(args: Array<String>) {
     val serializer = fragmentSerializerCollection.getFragmentSerializer<B>()
     val context = WriteContext()
     val obj = B(A(42, 117), -1)
-    val size = serializer.countSize(obj, context)
+    val size = serializer.countSize(context, obj)
     println(size)
     val arr = ByteArray(size)
     context.index = 0
     context.result = arr
-    serializer.write(obj, context)
+    serializer.write(context, obj)
     println(arr.contentToString())
     val serializer2 = fragmentSerializerCollection.getFragmentSerializer<B2>()
-    val b2 = B2(null, 1000)
-    val readB2 = serializer2.read(b2, ReadContext().also { it.data = arr; it.index = 0 })
+    val readB2 = serializer2.read(ReadContext().also { it.data = arr; it.index = 0 })
     println(readB2.x)
     println(readB2.a!!.x)
     println(readB2.a!!.y)
     val serializer3 = fragmentSerializerCollection.getFragmentSerializer<IntArray>()
-    val size3 = serializer3.countSize(intArrayOf(1, 2, 3), context)
+    val size3 = serializer3.countSize(context, intArrayOf(1, 2, 3))
     val arr3 = ByteArray(size3)
     context.index = 0
     context.result = arr3
-    serializer3.write(intArrayOf(1, 2, 3), context)
+    serializer3.write(context, intArrayOf(1, 2, 3))
     println(arr3.contentToString())
-    val readArr = serializer3.read(kotlin.IntArray(0), ReadContext().also { it.data = arr3; it.index = 0 })
+    val readArr = serializer3.read(ReadContext().also { it.data = arr3; it.index = 0 })
     println(readArr.contentToString())
 }
 
