@@ -1,5 +1,7 @@
 package grobuf
 
+import kotlin.reflect.KClass
+
 internal class Box(val name: String, val unboxMethodName: String, val boxMethodName: String)
 
 internal val primitiveToBoxed = mapOf(
@@ -36,15 +38,28 @@ internal fun String.toJVMSignature() = toJVMType().also {
 }
 
 internal val Class<*>.jvmPrimitiveType get() = when (this) {
-    Byte::class.java, java.lang.Byte::class.java -> JVMPrimitive.Byte
-    Short::class.java, java.lang.Short::class.java -> JVMPrimitive.Short
-    Int::class.java, java.lang.Integer::class.java -> JVMPrimitive.Int
-    Long::class.java, java.lang.Long::class.java -> JVMPrimitive.Long
-    Boolean::class.java, java.lang.Boolean::class.java -> JVMPrimitive.Boolean
-    Char::class.java, java.lang.Character::class.java -> JVMPrimitive.Char
-    Float::class.java, java.lang.Float::class.java -> JVMPrimitive.Float
-    Double::class.java, java.lang.Double::class.java -> JVMPrimitive.Double
+    Byte::class.java -> JVMPrimitive.Byte
+    Short::class.java -> JVMPrimitive.Short
+    Int::class.java -> JVMPrimitive.Int
+    Long::class.java -> JVMPrimitive.Long
+    Boolean::class.java -> JVMPrimitive.Boolean
+    Char::class.java -> JVMPrimitive.Char
+    Float::class.java -> JVMPrimitive.Float
+    Double::class.java -> JVMPrimitive.Double
     Void::class.java -> JVMPrimitive.Void
+    else -> null
+}
+
+internal val KClass<*>.jvmPrimitiveType get() = when (this) {
+    Byte::class -> JVMPrimitive.Byte
+    Short::class -> JVMPrimitive.Short
+    Int::class -> JVMPrimitive.Int
+    Long::class -> JVMPrimitive.Long
+    Boolean::class -> JVMPrimitive.Boolean
+    Char::class -> JVMPrimitive.Char
+    Float::class -> JVMPrimitive.Float
+    Double::class -> JVMPrimitive.Double
+    Void::class -> JVMPrimitive.Void
     else -> null
 }
 
@@ -55,6 +70,13 @@ internal val Class<*>.jvmType: String get() {
         this.jvmPrimitiveType?.shortName ?: canonicalName.toJVMType()
 }
 
+internal val KClass<*>.jvmType: String get() {
+    return if (this.java.isArray)
+        "[${this.java.componentType!!.jvmType}"
+    else
+        this.jvmPrimitiveType?.shortName ?: this.java.canonicalName.toJVMType()
+}
+
 internal val Class<*>.jvmSignature: String get() {
     return if (this.isArray)
         "[${this.componentType!!.jvmSignature}"
@@ -62,5 +84,17 @@ internal val Class<*>.jvmSignature: String get() {
         jvmType.toJVMSignature()
 }
 
+internal val KClass<*>.jvmSignature: String get() {
+    return if (this.java.isArray)
+        "[${this.java.componentType!!.jvmSignature}"
+    else
+        jvmType.toJVMSignature()
+}
+
 internal fun computeMethodJVMSignature(argumentTypes: List<Class<*>>, returnType: Class<*>) =
         "(${argumentTypes.joinToString(separator = "") { it.jvmSignature }})${returnType.jvmSignature}"
+
+internal fun computeMethodJVMSignature(argumentTypes: List<KClass<*>>, returnType: KClass<*>) =
+        "(${argumentTypes.joinToString(separator = "") { it.jvmSignature }})${returnType.jvmSignature}"
+
+internal val Class<*>.occupiesTwoSlots get() = this == Long::class.java || this == Double::class.java
