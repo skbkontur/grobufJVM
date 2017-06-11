@@ -1,5 +1,6 @@
 package grobuf
 
+import org.objectweb.asm.Opcodes
 import kotlin.reflect.KClass
 
 internal class Box(val name: String, val unboxMethodName: String, val boxMethodName: String)
@@ -15,21 +16,21 @@ internal val primitiveToBoxed = mapOf(
         "D" to Box("java/lang/Double"   , "doubleValue" , "valueOf")
 )
 
-internal enum class JVMPrimitive(val shortName: String, val size: kotlin.Int) {
-    Byte("B", 1),
-    Short("S", 2),
-    Int("I", 4),
-    Long("J", 8),
-    Boolean("Z", 1),
-    Char("C", 2),
-    Float("F", 4),
-    Double("D", 8),
-    Void("V", 0)
+internal enum class JVMPrimitive(val shortName: String, val size: kotlin.Int, val typeAsArrayElement: kotlin.Int) {
+    Byte("B", 1, Opcodes.T_BYTE),
+    Short("S", 2, Opcodes.T_SHORT),
+    Int("I", 4, Opcodes.T_INT),
+    Long("J", 8, Opcodes.T_LONG),
+    Boolean("Z", 1, Opcodes.T_BOOLEAN),
+    Char("C", 2, Opcodes.T_CHAR),
+    Float("F", 4, Opcodes.T_FLOAT),
+    Double("D", 8, Opcodes.T_DOUBLE),
+    Void("V", 0, 0)
 }
 
 internal val primitiveSignatures = enumValues<JVMPrimitive>().map { it.shortName }.toSet()
 
-internal fun String.toJVMIdentifier() = replace('/', '_').replace('.', '_')
+internal fun String.toJVMIdentifier() = replace('/', '_').replace('.', '_').replace("[", "Arr")
 internal fun String.toJVMType() = replace('.', '/')
 internal fun String.toJVMSignature() = toJVMType().also {
     if (primitiveSignatures.contains(it))

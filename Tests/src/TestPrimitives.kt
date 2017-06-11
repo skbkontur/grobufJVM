@@ -59,7 +59,7 @@ class TestPrimitives {
         val x = 3.14159f
         val data = serializer.serialize(Float::class.java, x)
         val readX = serializer.deserialize(Float::class.java, data)
-        assertEquals(x, readX)
+        assertEquals(x, readX, 1e-8f)
     }
 
     @Test

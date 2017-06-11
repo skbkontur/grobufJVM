@@ -206,6 +206,20 @@ open class SerializerImpl: Serializer {
         }
     }
 
+    private fun createArray(klass: Class<*>): Any {
+        return when (klass) {
+            Byte::class.java -> ByteArray(0)
+            Short::class.java -> ShortArray(0)
+            Int::class.java -> IntArray(0)
+            Long::class.java -> LongArray(0)
+            Boolean::class.java -> BooleanArray(0)
+            Char::class.java -> CharArray(0)
+            Float::class.java -> FloatArray(0)
+            Double::class.java -> DoubleArray(0)
+            else -> arrayOfNulls<Any>(0)
+        }
+    }
+
     override fun <T> getSize(klass: Class<T>, obj: T): Int {
         @Suppress("UNCHECKED_CAST")
         return (collection.getFragmentSerializer(klass) as FragmentSerializer<T>).countSize(obj, WriteContext())
@@ -224,7 +238,11 @@ open class SerializerImpl: Serializer {
     override fun <T : Any> deserialize(klass: Class<T>, data: ByteArray): T {
         @Suppress("UNCHECKED_CAST")
         val fragmentSerializer = collection.getFragmentSerializer(klass) as FragmentSerializer<T>
-        val prev = if (klass.isPrimitive) getDefault(klass) else unsafe.allocateInstance(klass)
+        val prev = when {
+            klass.isPrimitive -> getDefault(klass)
+            klass.isArray -> createArray(klass.componentType!!)
+            else -> unsafe.allocateInstance(klass)
+        }
         @Suppress("UNCHECKED_CAST")
         return fragmentSerializer.read(prev as T, ReadContext().also { it.data = data; it.index = 0 })
     }
@@ -240,17 +258,22 @@ class ReadContext {
     @JvmField var index = 0
 }
 
-@Suppress("unused", "DEPRECATION")
-internal abstract class FragmentSerializer<T> {
-    private val unsafe: Unsafe
-    private val byteArrayDataOffset: Int
-    init {
-        val theUnsafe: Field = Unsafe::class.java.getDeclaredField("theUnsafe")
-        theUnsafe.isAccessible = true
-        unsafe = theUnsafe.get(null) as Unsafe
-        byteArrayDataOffset = unsafe.arrayBaseOffset(ByteArray::class.java)
-    }
+private val unsafe = Unsafe::class.java.getDeclaredField("theUnsafe").let {
+    it.isAccessible = true
+    it.get(null) as Unsafe
+}
 
+private val byteArrayDataOffset    = unsafe.arrayBaseOffset(ByteArray::class.java).toLong()
+private val shortArrayDataOffset   = unsafe.arrayBaseOffset(ShortArray::class.java).toLong()
+private val intArrayDataOffset     = unsafe.arrayBaseOffset(IntArray::class.java).toLong()
+private val longArrayDataOffset    = unsafe.arrayBaseOffset(LongArray::class.java).toLong()
+private val charArrayDataOffset    = unsafe.arrayBaseOffset(CharArray::class.java).toLong()
+private val booleanArrayDataOffset = unsafe.arrayBaseOffset(BooleanArray::class.java).toLong()
+private val floatArrayDataOffset   = unsafe.arrayBaseOffset(FloatArray::class.java).toLong()
+private val doubleArrayDataOffset  = unsafe.arrayBaseOffset(DoubleArray::class.java).toLong()
+
+@Suppress("unused")
+internal abstract class FragmentSerializer<T> {
     abstract fun countSize(obj: T, context: WriteContext): Int
     abstract fun write(obj: T, context: WriteContext)
     abstract fun read(prev: T, context: ReadContext): T
@@ -266,6 +289,8 @@ internal abstract class FragmentSerializer<T> {
             length = readIntSafe(context.data, context.index) + 4
         context.index += length
     }
+
+    //------------Write unsafe------------------------------------------------------------------//
 
     protected fun writeByteUnsafe(array: ByteArray, offset: Int, value: Byte) {
         unsafe.putByte(array, byteArrayDataOffset + offset, value)
@@ -298,6 +323,8 @@ internal abstract class FragmentSerializer<T> {
     protected fun writeDoubleUnsafe(array: ByteArray, offset: Int, value: Double) {
         unsafe.putDouble(array, byteArrayDataOffset + offset, value)
     }
+
+    //------------Write safe------------------------------------------------------------------//
 
     protected fun writeByteSafe(array: ByteArray, offset: Int, value: Byte) {
         ensureSize(array, offset, 1)
@@ -339,6 +366,8 @@ internal abstract class FragmentSerializer<T> {
         unsafe.putDouble(array, byteArrayDataOffset + offset, value)
     }
 
+    //------------Read unsafe------------------------------------------------------------------//
+
     protected fun readByteUnsafe(array: ByteArray, offset: Int): Byte {
         return unsafe.getByte(array, byteArrayDataOffset + offset)
     }
@@ -370,6 +399,8 @@ internal abstract class FragmentSerializer<T> {
     protected fun readDoubleUnsafe(array: ByteArray, offset: Int): Double {
         return unsafe.getDouble(array, byteArrayDataOffset + offset)
     }
+
+    //------------Read safe------------------------------------------------------------------//
 
     protected fun readByteSafe(array: ByteArray, offset: Int): Byte {
         ensureSize(array, offset, 1)
@@ -409,6 +440,106 @@ internal abstract class FragmentSerializer<T> {
     protected fun readDoubleSafe(array: ByteArray, offset: Int): Double {
         ensureSize(array, offset, 8)
         return unsafe.getDouble(array, byteArrayDataOffset + offset)
+    }
+
+    //------------Write arrays safe------------------------------------------------------------------//
+
+    protected fun writeByteArraySafe(dest: ByteArray, offset: Int, source: ByteArray) {
+        val size = source.size
+        ensureSize(dest, offset, size)
+        unsafe.copyMemory(source, byteArrayDataOffset, dest, byteArrayDataOffset + offset, size.toLong())
+    }
+
+    protected fun writeShortArraySafe(dest: ByteArray, offset: Int, source: ShortArray) {
+        val size = source.size * 2
+        ensureSize(dest, offset, size)
+        unsafe.copyMemory(source, shortArrayDataOffset, dest, byteArrayDataOffset + offset, size.toLong())
+    }
+
+    protected fun writeIntArraySafe(dest: ByteArray, offset: Int, source: IntArray) {
+        val size = source.size * 4
+        ensureSize(dest, offset, size)
+        unsafe.copyMemory(source, intArrayDataOffset, dest, byteArrayDataOffset + offset, size.toLong())
+    }
+
+    protected fun writeLongArraySafe(dest: ByteArray, offset: Int, source: LongArray) {
+        val size = source.size * 8
+        ensureSize(dest, offset, size)
+        unsafe.copyMemory(source, longArrayDataOffset, dest, byteArrayDataOffset + offset, size.toLong())
+    }
+
+    protected fun writeCharArraySafe(dest: ByteArray, offset: Int, source: CharArray) {
+        val size = source.size * 2
+        ensureSize(dest, offset, size)
+        unsafe.copyMemory(source, charArrayDataOffset, dest, byteArrayDataOffset + offset, size.toLong())
+    }
+
+    protected fun writeBooleanArraySafe(dest: ByteArray, offset: Int, source: BooleanArray) {
+        val size = source.size
+        ensureSize(dest, offset, size)
+        unsafe.copyMemory(source, booleanArrayDataOffset, dest, byteArrayDataOffset + offset, size.toLong())
+    }
+
+    protected fun writeFloatArraySafe(dest: ByteArray, offset: Int, source: FloatArray) {
+        val size = source.size * 4
+        ensureSize(dest, offset, size)
+        unsafe.copyMemory(source, floatArrayDataOffset, dest, byteArrayDataOffset + offset, size.toLong())
+    }
+
+    protected fun writeDoubleArraySafe(dest: ByteArray, offset: Int, source: DoubleArray) {
+        val size = source.size * 8
+        ensureSize(dest, offset, size)
+        unsafe.copyMemory(source, doubleArrayDataOffset, dest, byteArrayDataOffset + offset, size.toLong())
+    }
+
+    //------------Read arrays safe------------------------------------------------------------------//
+
+    protected fun readByteArraySafe(dest: ByteArray, offset: Int, source: ByteArray) {
+        val size = dest.size
+        ensureSize(source, offset, size)
+        unsafe.copyMemory(source, byteArrayDataOffset + offset, dest, byteArrayDataOffset, size.toLong())
+    }
+
+    protected fun readShortArraySafe(dest: ShortArray, offset: Int, source: ByteArray) {
+        val size = dest.size * 2
+        ensureSize(source, offset, size)
+        unsafe.copyMemory(source, byteArrayDataOffset + offset, dest, shortArrayDataOffset, size.toLong())
+    }
+
+    protected fun readIntArraySafe(dest: IntArray, offset: Int, source: ByteArray) {
+        val size = dest.size * 4
+        ensureSize(source, offset, size)
+        unsafe.copyMemory(source, byteArrayDataOffset + offset, dest, intArrayDataOffset, size.toLong())
+    }
+
+    protected fun readLongArraySafe(dest: LongArray, offset: Int, source: ByteArray) {
+        val size = dest.size * 8
+        ensureSize(source, offset, size)
+        unsafe.copyMemory(source, byteArrayDataOffset + offset, dest, longArrayDataOffset, size.toLong())
+    }
+
+    protected fun readCharArraySafe(dest: CharArray, offset: Int, source: ByteArray) {
+        val size = dest.size * 2
+        ensureSize(source, offset, size)
+        unsafe.copyMemory(source, byteArrayDataOffset + offset, dest, charArrayDataOffset, size.toLong())
+    }
+
+    protected fun readBooleanArraySafe(dest: BooleanArray, offset: Int, source: ByteArray) {
+        val size = dest.size
+        ensureSize(source, offset, size)
+        unsafe.copyMemory(source, byteArrayDataOffset + offset, dest, booleanArrayDataOffset, size.toLong())
+    }
+
+    protected fun readFloatArraySafe(dest: FloatArray, offset: Int, source: ByteArray) {
+        val size = dest.size * 4
+        ensureSize(source, offset, size)
+        unsafe.copyMemory(source, byteArrayDataOffset + offset, dest, floatArrayDataOffset, size.toLong())
+    }
+
+    protected fun readDoubleArraySafe(dest: DoubleArray, offset: Int, source: ByteArray) {
+        val size = dest.size * 8
+        ensureSize(source, offset, size)
+        unsafe.copyMemory(source, byteArrayDataOffset + offset, dest, doubleArrayDataOffset, size.toLong())
     }
 
     protected fun ensureSize(array: ByteArray, offset: Int, size: Int) {
@@ -581,10 +712,14 @@ internal class FragmentSerializerCollection {
         }
     }
 
-    private fun getSerializerBuilder(klass: Class<*>): FragmentSerializerBuilderBase {
-        if (klass.jvmPrimitiveType != null)
-            return PrimitivesSerializerBuilder(this, klass)
-        return ClassSerializerBuilder(this, klass)
+    private fun getSerializerBuilder(klass: Class<*>) = when {
+        klass.jvmPrimitiveType != null ->
+            PrimitivesSerializerBuilder(this, klass)
+
+        klass.isArray && klass.componentType.jvmPrimitiveType != null ->
+            PrimitivesArraySerializerBuilder(this, klass)
+
+        else -> ClassSerializerBuilder(this, klass)
     }
 
     private fun initialize(type: String) {
@@ -625,10 +760,11 @@ internal class FragmentSerializerCollection {
         }
     }
 }
+
 internal abstract class FragmentSerializerBuilderBase(protected val fragmentSerializerCollection: FragmentSerializerCollection,
                                                       protected val klass: Class<*>)
     : ClassBuilder<FragmentSerializer<*>>(
-        className      = "${klass.canonicalName.toJVMIdentifier()}_Serializer",
+        className      = "${klass.jvmType.toJVMIdentifier()}_Serializer",
         superClassType = "grobuf/FragmentSerializer") {
 
     override fun buildBody() {
@@ -661,6 +797,14 @@ internal abstract class FragmentSerializerBuilderBase(protected val fragmentSeri
         loadContext()
         loadIndex<T>()
         visitLdcInsn(value)
+        visitInsn(Opcodes.IADD)
+        visitFieldInsn(Opcodes.PUTFIELD, T::class.jvmType, "index", Int::class.jvmSignature)
+    }
+
+    protected inline fun <reified T> MethodVisitor.increaseIndexBy(valueLoader: MethodVisitor.() -> Unit) {
+        loadContext()
+        loadIndex<T>()
+        valueLoader()
         visitInsn(Opcodes.IADD)
         visitFieldInsn(Opcodes.PUTFIELD, T::class.jvmType, "index", Int::class.jvmSignature)
     }
@@ -870,7 +1014,7 @@ internal class PrimitivesSerializerBuilder(fragmentSerializerCollection: Fragmen
     private val jvmPrimitiveType = klass.jvmPrimitiveType!!
 
     override fun MethodVisitor.countSizeNotNull() {
-        visitLdcInsn(jvmPrimitiveType.size + 1)
+        visitLdcInsn(1 /* typeCode */ + jvmPrimitiveType.size)
         ret<Int>()
         visitMaxs(1, 3)
     }
@@ -890,11 +1034,73 @@ internal class PrimitivesSerializerBuilder(fragmentSerializerCollection: Fragmen
     }
 }
 
+internal class PrimitivesArraySerializerBuilder(fragmentSerializerCollection: FragmentSerializerCollection, klass: Class<*>)
+    : FragmentSerializerBuilderBase(fragmentSerializerCollection, klass) {
+
+    private val elementJvmPrimitiveType = klass.componentType.jvmPrimitiveType!!
+
+    override fun MethodVisitor.countSizeNotNull() {
+        visitLdcInsn(1 /* typeCode */ + 4 /* length */) // stack: [5]
+        loadObj()                                       // stack: [5, obj]
+        visitInsn(Opcodes.ARRAYLENGTH)                  // stack: [5, obj.length]
+        visitLdcInsn(elementJvmPrimitiveType.size)      // stack: [5, obj.length, elementSize]
+        visitInsn(Opcodes.IMUL)                         // stack: [5, obj.length * elementSize]
+        visitInsn(Opcodes.IADD)                         // stack: [5 + obj.length * elementSize]
+        ret<Int>()                                      // return 5 + obj.length * elementSize; stack: []
+        visitMaxs(3, 3)
+    }
+
+    override fun MethodVisitor.writeNotNull() {
+        writeSafe<Byte> { visitLdcInsn(klass.groBufTypeCode.value) }                     // this.writeByteSafe(result, index, typeCode]; stack: []
+
+        loadObj()                                                                        // stack: [obj]
+        visitInsn(Opcodes.ARRAYLENGTH)                                                   // stack: [obj.length]
+        visitLdcInsn(elementJvmPrimitiveType.size)                                       // stack: [obj.length, elementSize]
+        visitInsn(Opcodes.IMUL)                                                          // stack: [obj.length * elementSize]
+        saveToSlot<Int>(3)                                                               // length <= slot_3 = obj.length * elementSize
+        writeSafe<Int> { loadSlot<Int>(3) }                                              // this.writeIntSafe(result, index, length]; stack: []
+
+        loadThis()                                                                       // stack: [this]
+        loadResult()                                                                     // stack: [this, result]
+        loadIndex<WriteContext>()                                                        // stack: [this, result, index]
+        loadObj()                                                                        // stack: [this, result, index, obj]
+        callVirtual(className, "write${elementJvmPrimitiveType}ArraySafe",
+                listOf(ByteArray::class.java, Int::class.java, klass), Void::class.java) // this.writeArray(result, index, obj); stack: []
+        increaseIndexBy<WriteContext> { loadSlot<Int>(3) }                               // index += length; stack: []
+
+        ret<Void>()
+        visitMaxs(4, 4)
+    }
+
+    override fun MethodVisitor.readNotNull() {
+        assertTypeCode(klass.groBufTypeCode)
+        readSafe<Int>()                                                                  // stack: [*(int*)data[index] => length]
+        visitInsn(Opcodes.DUP)                                                           // stack: [length, length]
+        saveToSlot<Int>(4)                                                               // slot_4 = length; stack: [length]
+        visitLdcInsn(elementJvmPrimitiveType.size)                                       // stack: [length, elementSize]
+        visitInsn(Opcodes.IDIV)                                                          // stack: [length / elementSize => arrayLength]
+        visitIntInsn(Opcodes.NEWARRAY, elementJvmPrimitiveType.typeAsArrayElement)       // stack: [new <elementType>Array[arrayLength] => result]
+        saveToSlot<Any>(5)                                                               // slot_5 = result; stack: []
+
+        loadThis()                                                                       // stack: [this]
+        loadSlot<Any>(5)                                                                 // stack: [this, result]
+        loadIndex<ReadContext>()                                                         // stack: [this, result, index]
+        loadData()                                                                       // stack: [this, result, index, data]
+        callVirtual(className, "read${elementJvmPrimitiveType}ArraySafe",
+                listOf(klass, Int::class.java, ByteArray::class.java), Void::class.java) // this.readArray(result, index, obj); stack: []
+        increaseIndexBy<ReadContext> { loadSlot<Int>(4) }                                // index += length; stack: []
+
+        loadSlot<Any>(5)
+        ret(klass)
+        visitMaxs(4, 6)
+    }
+}
+
 internal class ClassSerializerBuilder(fragmentSerializerCollection: FragmentSerializerCollection, klass: Class<*>)
     : FragmentSerializerBuilderBase(fragmentSerializerCollection, klass) {
 
     override fun MethodVisitor.countSizeNotNull() {
-        visitLdcInsn(5)                                                         // stack: [5 (typeCode + data length) => size]
+        visitLdcInsn(1 /* typeCode */ + 4 /* length */)                         // stack: [5 => size]
         klass.appropriateFields.forEach {
             val fieldSerializerType = fragmentSerializerCollection.getFragmentSerializerType(it.type)
             val fieldVisitedLabel = Label()
@@ -1159,6 +1365,15 @@ fun main(args: Array<String>) {
     println(readB2.x)
     println(readB2.a!!.x)
     println(readB2.a!!.y)
+    val serializer3 = fragmentSerializerCollection.getFragmentSerializer<IntArray>()
+    val size3 = serializer3.countSize(intArrayOf(1, 2, 3), context)
+    val arr3 = ByteArray(size3)
+    context.index = 0
+    context.result = arr3
+    serializer3.write(intArrayOf(1, 2, 3), context)
+    println(arr3.contentToString())
+    val readArr = serializer3.read(kotlin.IntArray(0), ReadContext().also { it.data = arr3; it.index = 0 })
+    println(readArr.contentToString())
 }
 
 class Z(val x: Int)
