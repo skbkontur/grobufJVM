@@ -2,13 +2,19 @@ package grobuf
 
 import grobuf.serializers.*
 
+internal class DynamicClassesLoader : ClassLoader() {
+    fun loadClass(name: String, byteCode: ByteArray): Class<*> {
+        return defineClass(name, byteCode, 0, byteCode.size)
+    }
+}
+
 private sealed class BuildState {
     class Building(val classType: JVMType): BuildState()
     class Built(val inst: Any, val requiredBuilders: List<JVMType>): BuildState()
     class Initialized(val inst: Any): BuildState()
 }
 
-internal class FragmentSerializerCollection {
+internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoader) {
     private val serializers = mutableMapOf<JVMType, BuildState>(
             String::class.jvmType to BuildState.Initialized(StringSerializer())
     )
@@ -56,21 +62,21 @@ internal class FragmentSerializerCollection {
 
     private fun getSerializerBuilder(klass: Class<*>) = when {
         klass.jvmPrimitiveType != null ->
-            PrimitivesSerializerBuilder(this, klass)
+            PrimitivesSerializerBuilder(classLoader, this, klass)
 
         klass.isArray ->
             if (klass.componentType.jvmPrimitiveType != null)
-                PrimitivesArraySerializerBuilder(this, klass)
+                PrimitivesArraySerializerBuilder(classLoader, this, klass)
             else
-                ArraySerializerBuilder(this, klass)
+                ArraySerializerBuilder(classLoader, this, klass)
 
         klass.jvmType.isBox ->
-            BoxesSerializerBuilder(this, klass)
+            BoxesSerializerBuilder(classLoader, this, klass)
 
         klass.isEnum ->
-            EnumSerializerBuilder(this, klass)
+            EnumSerializerBuilder(classLoader, this, klass)
 
-        else -> ClassSerializerBuilder(this, klass)
+        else -> ClassSerializerBuilder(classLoader, this, klass)
     }
 
     private fun initialize(type: JVMType) {

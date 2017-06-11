@@ -6,8 +6,10 @@ import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Opcodes
 import java.lang.reflect.Modifier
 
-internal class ClassSerializerBuilder(fragmentSerializerCollection: FragmentSerializerCollection, klass: Class<*>)
-    : FragmentSerializerBuilderBase(fragmentSerializerCollection, klass) {
+internal class ClassSerializerBuilder(classLoader: DynamicClassesLoader,
+                                      fragmentSerializerCollection: FragmentSerializerCollection,
+                                      klass: Class<*>)
+    : FragmentSerializerBuilderBase(classLoader, fragmentSerializerCollection, klass) {
 
     private val klassField by lazy { defineField("klass", klass::class.jvmType, klass) }
 

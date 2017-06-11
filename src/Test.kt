@@ -1,3 +1,4 @@
+import grobuf.DynamicClassesLoader
 import grobuf.FragmentSerializerCollection
 import grobuf.serializers.ReadContext
 import grobuf.serializers.WriteContext
@@ -9,7 +10,7 @@ class B(@JvmField var a: A, @JvmField var x: Int)
 class B2(@JvmField var a: A?, @JvmField var x: Int?)
 
 fun main(args: Array<String>) {
-    val fragmentSerializerCollection = FragmentSerializerCollection()
+    val fragmentSerializerCollection = FragmentSerializerCollection(DynamicClassesLoader())
     val serializer = fragmentSerializerCollection.getFragmentSerializer<B>()
     val context = WriteContext()
     val obj = B(A(42, 117, "zzz"), -1)

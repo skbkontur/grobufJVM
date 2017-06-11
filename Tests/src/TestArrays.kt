@@ -1,10 +1,16 @@
 import grobuf.Serializer
 import grobuf.SerializerImpl
 import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Test
 
 class TestArrays {
-    val serializer: Serializer = SerializerImpl()
+    lateinit var serializer: Serializer
+
+    @Before
+    fun setUp() {
+        serializer = SerializerImpl()
+    }
 
     @Test
     fun testSimple() {

@@ -4,8 +4,10 @@ import grobuf.*
 import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Opcodes
 
-internal class PrimitivesArraySerializerBuilder(fragmentSerializerCollection: FragmentSerializerCollection, klass: Class<*>)
-    : FragmentSerializerBuilderBase(fragmentSerializerCollection, klass) {
+internal class PrimitivesArraySerializerBuilder(classLoader: DynamicClassesLoader,
+                                                fragmentSerializerCollection: FragmentSerializerCollection,
+                                                klass: Class<*>)
+    : FragmentSerializerBuilderBase(classLoader, fragmentSerializerCollection, klass) {
 
     private val elementJvmPrimitiveType = klass.componentType.jvmPrimitiveType!!
 

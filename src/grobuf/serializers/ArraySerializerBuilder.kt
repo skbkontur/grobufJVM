@@ -5,8 +5,10 @@ import org.objectweb.asm.Label
 import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Opcodes
 
-internal class ArraySerializerBuilder(fragmentSerializerCollection: FragmentSerializerCollection, klass: Class<*>)
-    : FragmentSerializerBuilderBase(fragmentSerializerCollection, klass) {
+internal class ArraySerializerBuilder(classLoader: DynamicClassesLoader,
+                                      fragmentSerializerCollection: FragmentSerializerCollection,
+                                      klass: Class<*>)
+    : FragmentSerializerBuilderBase(classLoader, fragmentSerializerCollection, klass) {
 
     private val elementType = klass.componentType!!
     private val elementSerializerType = fragmentSerializerCollection.getFragmentSerializerType(elementType)

@@ -16,7 +16,7 @@ interface Serializer {
 
 open class SerializerImpl: Serializer {
 
-    private val collection = FragmentSerializerCollection()
+    private val collection = FragmentSerializerCollection(DynamicClassesLoader())
 
     override fun <T> getSize(klass: Class<T>, obj: T): Int {
         @Suppress("UNCHECKED_CAST")
@@ -83,7 +83,7 @@ fun main(args: Array<String>) {
     }
     zzz(Int::class)
     zzz<Int>()
-    val fragmentSerializerCollection = FragmentSerializerCollection()
+    val fragmentSerializerCollection = FragmentSerializerCollection(DynamicClassesLoader())
     val serializer = fragmentSerializerCollection.getFragmentSerializer<B>()
     val context = WriteContext()
     val obj = B(A(42, 117, "zzz"), -1, ZZ.Y)

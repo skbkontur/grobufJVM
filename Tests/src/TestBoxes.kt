@@ -1,11 +1,17 @@
 import grobuf.Serializer
 import grobuf.SerializerImpl
 import org.junit.Assert.assertEquals
+import org.junit.Before
 import org.junit.Test
 
 @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
 class TestBoxes {
-    val serializer: Serializer = SerializerImpl()
+    lateinit var serializer: Serializer
+
+    @Before
+    fun setUp() {
+        serializer = SerializerImpl()
+    }
 
     @Test
     fun testByte() {

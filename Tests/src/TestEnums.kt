@@ -1,6 +1,7 @@
 import grobuf.Serializer
 import grobuf.SerializerImpl
 import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Test
 
 enum class E1 {
@@ -16,7 +17,12 @@ enum class E2 {
 }
 
 class TestEnums {
-    val serializer: Serializer = SerializerImpl()
+    lateinit var serializer: Serializer
+
+    @Before
+    fun setUp() {
+        serializer = SerializerImpl()
+    }
 
     @Test
     fun testSimple() {

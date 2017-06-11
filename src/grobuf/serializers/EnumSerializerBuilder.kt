@@ -5,8 +5,10 @@ import org.objectweb.asm.Label
 import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Opcodes
 
-internal class EnumSerializerBuilder(fragmentSerializerCollection: FragmentSerializerCollection, klass: Class<*>)
-    : FragmentSerializerBuilderBase(fragmentSerializerCollection, klass) {
+internal class EnumSerializerBuilder(classLoader: DynamicClassesLoader,
+                                     fragmentSerializerCollection: FragmentSerializerCollection,
+                                     klass: Class<*>)
+    : FragmentSerializerBuilderBase(classLoader, fragmentSerializerCollection, klass) {
 
     @Suppress("UNCHECKED_CAST")
     val values = (klass.enumConstants!! as Array<Enum<*>>)

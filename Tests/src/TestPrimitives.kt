@@ -1,10 +1,16 @@
 import grobuf.Serializer
 import grobuf.SerializerImpl
 import org.junit.Assert.assertEquals
+import org.junit.Before
 import org.junit.Test
 
 class TestPrimitives {
-    val serializer: Serializer = SerializerImpl()
+    lateinit var serializer: Serializer
+
+    @Before
+    fun setUp() {
+        serializer = SerializerImpl()
+    }
 
     @Test
     fun testByte() {

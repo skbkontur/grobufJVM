@@ -5,9 +5,11 @@ import org.objectweb.asm.Label
 import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Opcodes
 
-internal abstract class FragmentSerializerBuilderBase(protected val fragmentSerializerCollection: FragmentSerializerCollection,
+internal abstract class FragmentSerializerBuilderBase(classLoader: DynamicClassesLoader,
+                                                      protected val fragmentSerializerCollection: FragmentSerializerCollection,
                                                       protected val klass: Class<*>)
     : ClassBuilder<FragmentSerializer<*>>(
+        classLoader    = classLoader,
         classType      = JVMType.FromString("${klass.jvmType.name.toJVMIdentifier()}_Serializer"),
         superClassType = FragmentSerializer::class.jvmType) {
 

@@ -3,8 +3,10 @@ package grobuf.serializers
 import grobuf.*
 import org.objectweb.asm.MethodVisitor
 
-internal class BoxesSerializerBuilder(fragmentSerializerCollection: FragmentSerializerCollection, klass: Class<*>)
-    : FragmentSerializerBuilderBase(fragmentSerializerCollection, klass) {
+internal class BoxesSerializerBuilder(classLoader: DynamicClassesLoader,
+                                      fragmentSerializerCollection: FragmentSerializerCollection,
+                                      klass: Class<*>)
+    : FragmentSerializerBuilderBase(classLoader, fragmentSerializerCollection, klass) {
 
     private val klassJVMType = klass.jvmType
     private val jvmPrimitiveType = enumValues<JVMPrimitive>().first { it.boxType == klassJVMType }

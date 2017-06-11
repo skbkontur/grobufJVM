@@ -1,6 +1,7 @@
 import grobuf.Serializer
 import grobuf.SerializerImpl
 import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Test
 
 class A(@JvmField var x: Int, @JvmField var y: Int)
@@ -14,7 +15,12 @@ class X(@JvmField var id: Int, @JvmField var y: Y?)
 class Y(@JvmField var c: Char, @JvmField var x: X?)
 
 class TestClasses {
-    val serializer: Serializer = SerializerImpl()
+    lateinit var serializer: Serializer
+
+    @Before
+    fun setUp() {
+        serializer = SerializerImpl()
+    }
 
     @Test
     fun testSimple() {

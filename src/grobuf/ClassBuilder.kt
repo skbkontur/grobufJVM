@@ -6,13 +6,8 @@ import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Opcodes
 import java.io.FileOutputStream
 
-private object DynamicClassesLoader : ClassLoader() {
-    fun loadClass(name: String, byteCode: ByteArray): Class<*> {
-        return defineClass(name, byteCode, 0, byteCode.size)
-    }
-}
-
-internal abstract class ClassBuilder<out T>(val classType: JVMType,
+internal abstract class ClassBuilder<out T>(val classLoader: DynamicClassesLoader,
+                                            val classType: JVMType,
                                             val superClassType: JVMType) {
 
     private class Field(val name: String, val type: JVMType, val value: Any?, val isLateinit: Boolean)
@@ -37,7 +32,7 @@ internal abstract class ClassBuilder<out T>(val classType: JVMType,
         fos.write(byteCode)
         fos.close()
 
-        val builtClass = DynamicClassesLoader.loadClass(classType.name, byteCode)
+        val builtClass = classLoader.loadClass(classType.name, byteCode)
         val createMethod = builtClass.getMethod("create", Array<Any?>::class.java)
         val arguments = fields
                 .filterNot { it.isLateinit }
