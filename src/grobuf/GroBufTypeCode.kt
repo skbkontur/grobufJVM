@@ -35,7 +35,7 @@ enum class GroBufTypeCode(val value: Byte, val length: Int) {
     //DateTimeNew(31, 8),
     //Reference(32),
     //DateTimeOffset(33),
-    //Tuple(34),
+    Tuple(34, -1)
     //CustomData(-1, -1)
     ;
 
@@ -77,7 +77,8 @@ private val groBufTypeCodeMap = mapOf(
 
 internal val Class<*>.groBufTypeCode: GroBufTypeCode
     get() = groBufTypeCodeMap[this] ?: (when {
-        isArray -> GroBufTypeCode.Array
-        isEnum -> GroBufTypeCode.Enum
-        else -> GroBufTypeCode.Object
+        isArray                         -> GroBufTypeCode.Array
+        isEnum                          -> GroBufTypeCode.Enum
+        superclass == Tuple::class.java -> GroBufTypeCode.Tuple
+        else                            -> GroBufTypeCode.Object
     })
