@@ -3,29 +3,34 @@ package grobuf
 import org.objectweb.asm.ClassVisitor
 import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Opcodes
+import java.lang.reflect.Type
 import kotlin.reflect.KClass
 
 
-internal fun MethodVisitor.castObjectTo(type: JVMType) {
-    if (type !is JVMType.Primitive) {
-        visitTypeInsn(Opcodes.CHECKCAST, type.name)
-    } else {
-        val boxType = type.jvmPrimitive.boxType
-                ?: throw IllegalStateException("Cast to void is not allowed")
-        visitTypeInsn(Opcodes.CHECKCAST, boxType.name)
-        // Unbox value.
-        callVirtual(boxType, type.jvmPrimitive.unboxMethodName,
-                emptyList(), type)
-    }
-}
-
-internal fun MethodVisitor.castToObject(type: JVMType) {
-    if (type is JVMType.Primitive) {
-        val boxType = type.jvmPrimitive.boxType
-                ?: throw IllegalStateException("Cast from void is not allowed")
+internal fun MethodVisitor.cast(from: JVMType, to: JVMType) {
+    if (from is JVMType.Primitive) {
+        if (to is JVMType.Primitive) {
+            if (from == to) return
+            error("Cast between two different primitives is not supported")
+        }
         // Box value.
-        call(Opcodes.INVOKESTATIC, boxType, type.jvmPrimitive.boxMethodName,
-                listOf(type), boxType)
+        val boxType = from.jvmPrimitive.boxType
+                ?: throw IllegalStateException("Cast from void is not allowed")
+        call(Opcodes.INVOKESTATIC, boxType, from.jvmPrimitive.boxMethodName,
+                listOf(from), boxType)
+    } else {
+        if (to is JVMType.Primitive) {
+            // Unbox value.
+            val boxType = to.jvmPrimitive.boxType
+                    ?: throw IllegalStateException("Cast to void is not allowed")
+            if (from != boxType)
+                visitTypeInsn(Opcodes.CHECKCAST, boxType.name)
+            callVirtual(boxType, to.jvmPrimitive.unboxMethodName,
+                    emptyList(), to)
+        } else {
+            if (to != Any::class.java)
+                visitTypeInsn(Opcodes.CHECKCAST, to.name)
+        }
     }
 }
 
@@ -45,7 +50,7 @@ private fun MethodVisitor.ret(jvmPrimitive: JVMPrimitive?) {
     visitInsn(opcode)
 }
 
-internal fun MethodVisitor.ret(klass: Class<*>) = ret(klass.jvmPrimitiveType)
+internal fun MethodVisitor.ret(type: Type) = ret(type.klass.jvmPrimitiveType)
 
 internal inline fun<reified T> MethodVisitor.ret() = ret(T::class.jvmPrimitiveType)
 
@@ -67,7 +72,7 @@ private fun MethodVisitor.loadSlot(jvmPrimitive: JVMPrimitive?, index: Int) {
 internal fun MethodVisitor.loadSlot(type: JVMType, index: Int) =
         loadSlot((type as? JVMType.Primitive)?.jvmPrimitive, index)
 
-internal fun MethodVisitor.loadSlot(klass: Class<*>, index: Int) = loadSlot(klass.jvmPrimitiveType, index)
+internal fun MethodVisitor.loadSlot(type: Type, index: Int) = loadSlot(type.klass.jvmPrimitiveType, index)
 
 internal inline fun<reified T> MethodVisitor.loadSlot(index: Int) = loadSlot(T::class.jvmPrimitiveType, index)
 
@@ -89,14 +94,14 @@ private fun MethodVisitor.saveToSlot(jvmPrimitive: JVMPrimitive?, index: Int) {
 internal fun MethodVisitor.saveToSlot(type: JVMType, index: Int) =
         saveToSlot((type as? JVMType.Primitive)?.jvmPrimitive, index)
 
-internal fun MethodVisitor.saveToSlot(klass: Class<*>, index: Int) = saveToSlot(klass.jvmPrimitiveType, index)
+internal fun MethodVisitor.saveToSlot(type: Type, index: Int) = saveToSlot(type.klass.jvmPrimitiveType, index)
 
 internal inline fun<reified T> MethodVisitor.saveToSlot(index: Int) = saveToSlot(T::class.jvmPrimitiveType, index)
 
 internal fun ClassVisitor.defineMethod(access: Int, name: String, argumentTypes: List<JVMType>, returnType: JVMType) =
         visitMethod(access, name, computeMethodJVMSignature(argumentTypes, returnType), null, null)
 
-internal fun ClassVisitor.defineMethod(access: Int, name: String, argumentTypes: List<Class<*>>, returnType: Class<*>) =
+internal fun ClassVisitor.defineMethod(access: Int, name: String, argumentTypes: List<Type>, returnType: Type) =
         visitMethod(access, name, computeMethodJVMSignature(argumentTypes, returnType), null, null)
 
 private fun ClassVisitor.defineMethodK(access: Int, name: String, argumentTypes: List<KClass<*>>, returnType: KClass<*>) =
@@ -117,7 +122,7 @@ internal inline fun<reified T1, reified T2, reified T3, reified R> ClassVisitor.
 internal fun MethodVisitor.call(opcode: Int, owner: JVMType, name: String, argumentTypes: List<JVMType>, returnType: JVMType) =
         visitMethodInsn(opcode, owner.name, name, computeMethodJVMSignature(argumentTypes, returnType), false)
 
-internal fun MethodVisitor.call(opcode: Int, owner: JVMType, name: String, argumentTypes: List<Class<*>>, returnType: Class<*>) =
+internal fun MethodVisitor.call(opcode: Int, owner: JVMType, name: String, argumentTypes: List<Type>, returnType: Type) =
         visitMethodInsn(opcode, owner.name, name, computeMethodJVMSignature(argumentTypes, returnType), false)
 
 private fun MethodVisitor.callK(opcode: Int, owner: JVMType, name: String, argumentTypes: List<KClass<*>>, returnType: KClass<*>) =
@@ -135,7 +140,7 @@ internal inline fun<reified T1, reified T2, reified R> MethodVisitor.call2(opcod
 internal inline fun<reified T1, reified T2, reified T3, reified R> MethodVisitor.call3(opcode: Int, owner: JVMType, name: String) =
         callK(opcode, owner, name, listOf(T1::class, T2::class, T3::class), R::class)
 
-internal fun MethodVisitor.ctorCall(owner: JVMType, argumentTypes: List<Class<*>>) =
+internal fun MethodVisitor.ctorCall(owner: JVMType, argumentTypes: List<Type>) =
         call(Opcodes.INVOKESPECIAL, owner, "<init>", argumentTypes, Void::class.java)
 
 private fun MethodVisitor.ctorCallK(owner: JVMType, argumentTypes: List<KClass<*>>) =
@@ -154,7 +159,7 @@ internal inline fun<reified T1, reified T2, reified T3> MethodVisitor.ctorCall3(
 internal fun MethodVisitor.callVirtual(owner: JVMType, name: String, argumentTypes: List<JVMType>, returnType: JVMType) =
         call(Opcodes.INVOKEVIRTUAL, owner, name, argumentTypes, returnType)
 
-internal fun MethodVisitor.callVirtual(owner: JVMType, name: String, argumentTypes: List<Class<*>>, returnType: Class<*>) =
+internal fun MethodVisitor.callVirtual(owner: JVMType, name: String, argumentTypes: List<Type>, returnType: Type) =
         call(Opcodes.INVOKEVIRTUAL, owner, name, argumentTypes, returnType)
 
 private fun MethodVisitor.callVirtualK(owner: JVMType, name: String, argumentTypes: List<KClass<*>>, returnType: KClass<*>) =

@@ -4,13 +4,19 @@ import grobuf.*
 import org.objectweb.asm.Label
 import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Opcodes
+import java.lang.reflect.GenericArrayType
+import java.lang.reflect.Type
 
 internal class ArraySerializerBuilder(classLoader: DynamicClassesLoader,
                                       fragmentSerializerCollection: FragmentSerializerCollection,
-                                      klass: Class<*>)
-    : FragmentSerializerBuilderBase(classLoader, fragmentSerializerCollection, klass) {
+                                      type: Type)
+    : FragmentSerializerBuilderBase(classLoader, fragmentSerializerCollection, type) {
 
-    private val elementType = klass.componentType!!
+    private val elementType = if (type is GenericArrayType)
+        type.genericComponentType!!
+    else
+        klass.componentType!!
+
     private val elementSerializerType = fragmentSerializerCollection.getFragmentSerializerType(elementType)
     private val elementSerializerField = defineField("elementSerializer", elementSerializerType, null, true)
 
@@ -34,6 +40,7 @@ internal class ArraySerializerBuilder(classLoader: DynamicClassesLoader,
         loadObj()                                                                   // stack: [size, elementSerializer, context, obj]
         loadSlot<Int>(indexSlot)                                                    // stack: [size, elementSerializer, context, obj, index]
         visitInsn(Opcodes.AALOAD)                                                   // stack: [size, elementSerializer, context, obj[index]]
+        cast(Any::class.jvmType, elementType.jvmType)
         callVirtual(elementSerializerType, "countSize",
                 listOf(WriteContext::class.java, elementType), Int::class.java)     // stack: [size, elementSerializer.countSize(context, obj[index])]
         visitInsn(Opcodes.IADD)                                                     // stack: [size + elementSerializer.countSize(context, obj[index]) => size]
@@ -78,6 +85,7 @@ internal class ArraySerializerBuilder(classLoader: DynamicClassesLoader,
         loadObj()                                                                   // stack: [elementSerializer, context, obj]
         loadLocal(index)                                                            // stack: [elementSerializer, context, obj, index]
         visitInsn(Opcodes.AALOAD)                                                   // stack: [elementSerializer, context, obj[index]]
+        cast(Any::class.jvmType, elementType.jvmType)
         callVirtual(elementSerializerType, "write",
                 listOf(WriteContext::class.java, elementType), Void::class.java)    // elementSerializer.write(context, obj[index]); stack: []
 

@@ -2,11 +2,12 @@ package grobuf.serializers
 
 import grobuf.*
 import org.objectweb.asm.MethodVisitor
+import java.lang.reflect.Type
 
 internal class BoxesSerializerBuilder(classLoader: DynamicClassesLoader,
                                       fragmentSerializerCollection: FragmentSerializerCollection,
-                                      klass: Class<*>)
-    : FragmentSerializerBuilderBase(classLoader, fragmentSerializerCollection, klass) {
+                                      type: Type)
+    : FragmentSerializerBuilderBase(classLoader, fragmentSerializerCollection, type) {
 
     private val klassJVMType = klass.jvmType
     private val jvmPrimitiveType = enumValues<JVMPrimitive>().first { it.boxType == klassJVMType }
@@ -30,9 +31,9 @@ internal class BoxesSerializerBuilder(classLoader: DynamicClassesLoader,
 
     override fun MethodVisitor.readNotNull(): Int {
         // TODO: Coercion between primitives.
-        readSafe(jvmPrimitiveType.klass)       // stack: [this.read<type>Safe(result, index)]
-        castToObject(jvmPrimitiveType.jvmType) // stack: [this.read<type>Sage(result, index).box()]
-        ret(klass)                             // return this.read<type>Sage(result, index).box(); stack: []
+        readSafe(jvmPrimitiveType.klass)                   // stack: [this.read<type>Safe(result, index)]
+        cast(jvmPrimitiveType.jvmType, Any::class.jvmType) // stack: [this.read<type>Sage(result, index).box()]
+        ret(klass)                                         // return this.read<type>Sage(result, index).box(); stack: []
         return 3
     }
 }

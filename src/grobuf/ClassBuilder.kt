@@ -99,7 +99,7 @@ internal abstract class ClassBuilder<out T>(val classLoader: DynamicClassesLoade
             loadSlot<Array<Any?>>(1)                         // stack: [this, args]
             visitLdcInsn(index)                              // stack: [this, args, index]
             visitInsn(Opcodes.AALOAD)                        // stack: [this, args[index]]
-            castObjectTo(field.type)                         // stack: [this, (fieldType)args[index]]
+            cast(Any::class.jvmType, field.type)             // stack: [this, (fieldType)args[index]]
             visitFieldInsn(Opcodes.PUTFIELD, classType.name,
                     field.name, field.type.signature)        // this.field = (fieldType)args[index]; stack: []
         }

@@ -4,11 +4,12 @@ import grobuf.*
 import org.objectweb.asm.Label
 import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Opcodes
+import java.lang.reflect.Type
 
 internal class EnumSerializerBuilder(classLoader: DynamicClassesLoader,
                                      fragmentSerializerCollection: FragmentSerializerCollection,
-                                     klass: Class<*>)
-    : FragmentSerializerBuilderBase(classLoader, fragmentSerializerCollection, klass) {
+                                     type: Type)
+    : FragmentSerializerBuilderBase(classLoader, fragmentSerializerCollection, type) {
 
     @Suppress("UNCHECKED_CAST")
     val values = (klass.enumConstants!! as Array<Enum<*>>)
@@ -50,7 +51,7 @@ internal class EnumSerializerBuilder(classLoader: DynamicClassesLoader,
         genSwitch(values.map { it.second }, hashCode.slot, defaultLabel) {
             visitLdcInsn(it)            // stack: [this.values, index]
             visitInsn(Opcodes.AALOAD)   // stack: [this.values[index]]
-            castObjectTo(klass.jvmType) // stack: [(type)this.value[index]]
+            cast(Any::class.jvmType, klass.jvmType) // stack: [(type)this.value[index]]
             ret(klass)                  // return (type)this.values[index]; stack: []
         }
 

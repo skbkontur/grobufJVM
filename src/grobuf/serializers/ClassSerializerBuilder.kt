@@ -5,18 +5,20 @@ import org.objectweb.asm.Label
 import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Opcodes
 import java.lang.reflect.Modifier
+import java.lang.reflect.Type
 
 internal class ClassSerializerBuilder(classLoader: DynamicClassesLoader,
                                       fragmentSerializerCollection: FragmentSerializerCollection,
-                                      klass: Class<*>)
-    : FragmentSerializerBuilderBase(classLoader, fragmentSerializerCollection, klass) {
+                                      type: Type)
+    : FragmentSerializerBuilderBase(classLoader, fragmentSerializerCollection, type) {
 
     private val klassField by lazy { defineField("klass", klass::class.jvmType, klass) }
 
     override fun MethodVisitor.countSizeNotNull(): Int {
         visitLdcInsn(1 /* typeCode */ + 4 /* length */)                         // stack: [5 => size]
-        klass.appropriateFields.forEach {
-            val fieldSerializerType = fragmentSerializerCollection.getFragmentSerializerType(it.type)
+        appropriateFields.forEach {
+            val fieldType = it.genericType.substitute(getTypeArgumentsFor(it.declaringClass))
+            val fieldSerializerType = fragmentSerializerCollection.getFragmentSerializerType(fieldType)
             val fieldVisitedLabel = Label()
             val field = declareLocal<Any>()
             if (it.type.isReference) {
@@ -29,15 +31,18 @@ internal class ClassSerializerBuilder(classLoader: DynamicClassesLoader,
             }
             loadField(getSerializerField(fieldSerializerType))                  // stack: [size, fieldSerializer]
             loadContext()                                                       // stack: [size, fieldSerializer, context]
-            if (it.type.isReference)
+            if (fieldType.isReference) {
                 loadLocal(field)                                                // stack: [size, fieldSerializer, context, obj.field]
+                cast(Any::class.jvmType, fieldType.jvmType)
+            }
             else {
                 loadObj()                                                       // stack: [size, fieldSerializer, context, obj]
                 visitFieldInsn(Opcodes.GETFIELD, klass.jvmType.name,
                         it.name, it.type.jvmType.signature)                     // stack: [size, fieldSerializer, context, obj.field]
+                cast(it.type.jvmType, fieldType.jvmType)
             }
             callVirtual(fieldSerializerType, "countSize",
-                    listOf(WriteContext::class.java, it.type), Int::class.java) // stack: [size, fieldSerializer.countSize(context, obj.field)]
+                    listOf(WriteContext::class.java, fieldType), Int::class.java) // stack: [size, fieldSerializer.countSize(context, obj.field)]
             visitInsn(Opcodes.IADD)                                             // stack: [size + fieldSerializer.countSize(context, obj.field) => size]
             visitLdcInsn(8 /* hashCode */)                                      // stack: [size, 8]
             visitInsn(Opcodes.IADD)                                             // stack: [size + 8 => size]
@@ -53,11 +58,12 @@ internal class ClassSerializerBuilder(classLoader: DynamicClassesLoader,
         val start = declareLocal<Int>()
         saveToLocal(start)                                                       // start = index; stack: []
         increaseIndexBy<WriteContext>(4)                                         // index += 4; stack: []
-        klass.appropriateFields.forEach {
-            val fieldSerializerType = fragmentSerializerCollection.getFragmentSerializerType(it.type)
+        appropriateFields.forEach {
+            val fieldType = it.genericType.substitute(getTypeArgumentsFor(it.declaringClass))
+            val fieldSerializerType = fragmentSerializerCollection.getFragmentSerializerType(fieldType)
             val fieldVisitedLabel = Label()
             val field = declareLocal<Any>()
-            if (it.type.isReference) {
+            if (fieldType.isReference) {
                 loadObj()                                                        // stack: [obj]
                 visitFieldInsn(Opcodes.GETFIELD, klass.jvmType.name,
                         it.name, it.type.jvmType.signature)                      // stack: [obj.field]
@@ -68,15 +74,18 @@ internal class ClassSerializerBuilder(classLoader: DynamicClassesLoader,
             writeSafe<Long> { visitLdcInsn(HashCalculator.calcHash(it.name)) }   // writeLongSafe(calcHash(fieldName)); stack: []
             loadField(getSerializerField(fieldSerializerType))                   // stack: [fieldSerializer]
             loadContext()                                                        // stack: [fieldSerializer, context]
-            if (it.type.isReference)
+            if (fieldType.isReference) {
                 loadLocal(field)                                                 // stack: [fieldSerializer, context, obj.field]
+                cast(Any::class.jvmType, fieldType.jvmType)
+            }
             else {
                 loadObj()                                                        // stack: [fieldSerializer, context, obj]
                 visitFieldInsn(Opcodes.GETFIELD, klass.jvmType.name,
                         it.name, it.type.jvmType.signature)                      // stack: [fieldSerializer, context, obj.field]
+                cast(it.type.jvmType, fieldType.jvmType)
             }
             callVirtual(fieldSerializerType, "write",
-                    listOf(WriteContext::class.java, it.type), Void::class.java) // fieldSerializer.write(context, obj.field); stack: []
+                    listOf(WriteContext::class.java, fieldType), Void::class.java) // fieldSerializer.write(context, obj.field); stack: []
             visitLabel(fieldVisitedLabel)
         }
 
@@ -87,7 +96,7 @@ internal class ClassSerializerBuilder(classLoader: DynamicClassesLoader,
     }
 
     override fun MethodVisitor.readNotNull(): Int {
-        val fields = klass.appropriateFields
+        val fields = appropriateFields
                 .map { it to HashCalculator.calcHash(it.name) }
                 .sortedBy { it.second }
         assertTypeCode(GroBufTypeCode.Object)
@@ -101,7 +110,7 @@ internal class ClassSerializerBuilder(classLoader: DynamicClassesLoader,
             loadThis()                                               // stack: [this]
             loadField(klassField)                                    // stack: [this, klass]
             callVirtual1<Class<*>, Any>(classType, "createInstance") // stack: [this.createInstance(klass)]
-            castObjectTo(klass.jvmType)                              // stack: [(klass)this.createInstance(klass) => result]
+            cast(Any::class.jvmType, klass.jvmType)                  // stack: [(klass)this.createInstance(klass) => result]
         }
 
         readSafe<Int>()                                              // stack: [result, length]
@@ -122,12 +131,13 @@ internal class ClassSerializerBuilder(classLoader: DynamicClassesLoader,
         val defaultLabel = Label()
         genSwitch(fields.map { it.second }, hashCode.slot, defaultLabel) {
             val field = fields[it].first
-            val fieldSerializerType = fragmentSerializerCollection.getFragmentSerializerType(field.type)
+            val fieldType = field.genericType.substitute(getTypeArgumentsFor(field.declaringClass))
+            val fieldSerializerType = fragmentSerializerCollection.getFragmentSerializerType(fieldType)
             visitInsn(Opcodes.DUP)                                   // stack: [result, result]
             loadField(getSerializerField(fieldSerializerType))       // stack: [result, result, fieldSerializer]
             loadContext()                                            // stack: [result, result, fieldSerializer, context]
             callVirtual(fieldSerializerType, "read",
-                    listOf(ReadContext::class.java), field.type)     // stack: [result, result, fieldSerializer.read(context)]
+                    listOf(ReadContext::class.java), fieldType)      // stack: [result, result, fieldSerializer.read(context)]
             visitFieldInsn(Opcodes.PUTFIELD, klass.jvmType.name,
                     field.name, field.type.jvmType.signature)        // result.field = fieldSerializer.read(context); stack: [result]
             visitJumpInsn(Opcodes.GOTO, loopEndLabel)
@@ -161,11 +171,12 @@ internal class ClassSerializerBuilder(classLoader: DynamicClassesLoader,
         return 4
     }
 
-    private val Class<*>.appropriateFields: List<java.lang.reflect.Field>
-        get() = // TODO: DataMembersExtractor
-            fields.filter { Modifier.isPublic(it.modifiers) }
-                  .filterNot { Modifier.isStatic(it.modifiers) }
-                  .filterNot { Modifier.isFinal(it.modifiers) }
+    private val appropriateFields by lazy {
+        // TODO: DataMembersExtractor, Kotlin properties.
+        klass.fields.filter { Modifier.isPublic(it.modifiers) }
+                    .filterNot { Modifier.isStatic(it.modifiers) }
+                    .filterNot { Modifier.isFinal(it.modifiers) }
+    }
 
     private fun getSerializerField(type: JVMType) = serializerFields.getOrPut(type) {
         defineField("${type.name.toJVMIdentifier()}_serializer", type, null, true)

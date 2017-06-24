@@ -4,14 +4,34 @@ import grobuf.*
 import org.objectweb.asm.Label
 import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Opcodes
+import java.lang.reflect.GenericArrayType
+import java.lang.reflect.ParameterizedType
+import java.lang.reflect.Type
 
 internal abstract class FragmentSerializerBuilderBase(classLoader: DynamicClassesLoader,
                                                       protected val fragmentSerializerCollection: FragmentSerializerCollection,
-                                                      protected val klass: Class<*>)
+                                                      protected val type: Type)
     : ClassBuilder<FragmentSerializer<*>>(
         classLoader    = classLoader,
-        classType      = JVMType.FromString("${klass.jvmType.name.toJVMIdentifier()}_Serializer"),
+        classType      = JVMType.FromString("${(type.jvmType.name +
+                if (type.typeArguments.isEmpty()) ""
+                else type.typeArguments.joinToString("$", "$") { it.jvmType.name })
+                .toJVMIdentifier()}_Serializer"),
         superClassType = FragmentSerializer::class.jvmType) {
+
+    protected val klass = type.klass
+
+    protected fun getTypeArgumentsFor(klass: Class<*>): List<Type> {
+        var type = this.type
+        while (true) {
+            val currentClass = type.klass
+            if (currentClass == Any::class.java)
+                return emptyList()
+            if (currentClass == klass)
+                return type.typeArguments
+            type = currentClass.genericSuperclass
+        }
+    }
 
     class Local(val type: JVMType, val slot: Int) {
         val size = if (type.occupiesTwoSlots) 2 else 1
@@ -304,11 +324,11 @@ internal abstract class FragmentSerializerBuilderBase(classLoader: DynamicClasse
             argumentTypes.forEachIndexed { index, argumentType ->
                 loadSlot(argumentType.actualType, index + 1)
                 if (argumentType.erased)
-                    castObjectTo(argumentType.klass.jvmType)
+                    cast(Any::class.jvmType, argumentType.klass.jvmType)
             }
             callVirtual(classType, name, argumentTypes.map { it.klass }, returnType.klass)
             if (returnType.erased)
-                castToObject(returnType.klass.jvmType)
+                cast(returnType.klass.jvmType, Any::class.jvmType)
             ret(returnType.actualType)
             visitMaxs(argumentTypes.size + 1, argumentTypes.size + 1)
             visitEnd()

@@ -1,6 +1,9 @@
 package grobuf
 
 import org.objectweb.asm.Opcodes
+import sun.reflect.generics.reflectiveObjects.GenericArrayTypeImpl
+import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
+import java.lang.reflect.*
 import kotlin.reflect.KClass
 
 internal enum class JVMPrimitive(val shortName: String, val javaName: String, val javaBoxName: String?,
@@ -76,13 +79,68 @@ internal val Class<*>.jvmType get() =
 internal val KClass<*>.jvmType get() =
         jvmPrimitiveType?.let { JVMType.Primitive(it) } ?: JVMType.FromClass(this.java)
 
+internal val Type.jvmType get() = klass.jvmType
+
 internal val Class<*>.isReference get() = jvmPrimitiveType == null
+
+internal val Type.isReference get() = klass.isReference
 
 internal fun computeMethodJVMSignature(argumentTypes: List<JVMType>, returnType: JVMType) =
         "(${argumentTypes.joinToString(separator = "") { it.signature }})${returnType.signature}"
 
-internal fun computeMethodJVMSignature(argumentTypes: List<Class<*>>, returnType: Class<*>) =
+internal fun computeMethodJVMSignature(argumentTypes: List<Type>, returnType: Type) =
         "(${argumentTypes.joinToString(separator = "") { it.jvmType.signature }})${returnType.jvmType.signature}"
 
 internal fun computeMethodJVMSignature(argumentTypes: List<KClass<*>>, returnType: KClass<*>) =
         "(${argumentTypes.joinToString(separator = "") { it.jvmType.signature }})${returnType.jvmType.signature}"
+
+internal val Type.klass: Class<*> get() = when (this) {
+    is Class<*> -> this
+    is GenericArrayType -> Array<Any?>::class.java
+    is ParameterizedType -> this.rawType as Class<*>
+    else -> error("Unexpected type: $this")
+}
+
+internal val Type.typeArguments get() = when (this) {
+    is Class<*> -> emptyList<Type>()
+    is GenericArrayType -> listOf(this.genericComponentType)
+    is ParameterizedType -> this.actualTypeArguments.toList()
+    else -> error("Unexpected type: $this")
+}
+
+internal fun Type.substitute(typeArguments: List<Type>): Type = when (this) {
+    is Class<*> -> this
+
+    is GenericArrayType -> {
+        val substitutedComponentType = this.genericComponentType.substitute(typeArguments)
+        if (substitutedComponentType == this.genericComponentType)
+            this
+        else
+            GenericArrayTypeImpl.make(substitutedComponentType)
+    }
+
+    is ParameterizedType -> {
+        val substitutedTypeArguments = this.actualTypeArguments.map { it.substitute(typeArguments) }
+        if (substitutedTypeArguments.withIndex().all { it.value == this.actualTypeArguments[it.index] })
+            this
+        else
+            ParameterizedTypeImpl.make(this.rawType as Class<*>, substitutedTypeArguments.toTypedArray(), this.ownerType)
+    }
+
+    is TypeVariable<*> -> {
+        val index = this.genericDeclaration.typeParameters.indexOf(this)
+        typeArguments.elementAtOrNull(index)
+                ?: error("Unexpected type $this")
+    }
+
+    is WildcardType -> {
+        // Erasure.
+        if (this.upperBounds.isEmpty())
+            Any::class.java
+        else
+            this.upperBounds.single().substitute(typeArguments)
+    }
+
+    else -> error("Unexpected type $this")
+}
+

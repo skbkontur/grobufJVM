@@ -28,7 +28,7 @@ class TestEnums {
     fun testSimple() {
         val e = E1.X
         val data = serializer.serialize(e)
-        val readE = serializer.deserialize(E1::class.java, data)
+        val readE = serializer.deserialize(data, E1::class.java)
         assertEquals(e, readE)
     }
 
@@ -36,7 +36,7 @@ class TestEnums {
     fun testChangeOrder() {
         val e = E1.Y
         val data = serializer.serialize(e)
-        val readE = serializer.deserialize(E2::class.java, data)
+        val readE = serializer.deserialize(data, E2::class.java)
         assertEquals(E2.Y, readE)
     }
 }

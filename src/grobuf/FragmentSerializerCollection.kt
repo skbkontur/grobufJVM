@@ -1,6 +1,7 @@
 package grobuf
 
 import grobuf.serializers.*
+import java.lang.reflect.Type
 
 internal class DynamicClassesLoader : ClassLoader() {
     fun loadClass(name: String, byteCode: ByteArray): Class<*> {
@@ -10,15 +11,15 @@ internal class DynamicClassesLoader : ClassLoader() {
 
 private sealed class BuildState {
     class Building(val classType: JVMType): BuildState()
-    class Built(val inst: Any, val requiredBuilders: List<JVMType>): BuildState()
+    class Built(val inst: Any, val requiredBuilders: List<Type>): BuildState()
     class Initialized(val inst: Any): BuildState()
 }
 
 internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoader) {
-    private val serializers = concurrentMapOf<JVMType, BuildState>(
-            String::class.jvmType to BuildState.Initialized(StringSerializer())
+    private val serializers = concurrentMapOf<Type, BuildState>(
+            String::class.java to BuildState.Initialized(StringSerializer())
     )
-    private val serializerToTypeMap = mutableMapOf<JVMType, JVMType>()
+    private val serializerToTypeMap = mutableMapOf<JVMType, Type>()
 
     init {
         serializers.forEach { type, writer ->
@@ -26,11 +27,10 @@ internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoade
         }
     }
 
-    fun getFragmentSerializerType(klass: Class<*>): JVMType {
-        val canonicalName = klass.jvmType
-        val buildState = serializers[canonicalName]
+    fun getFragmentSerializerType(type: Type): JVMType {
+        val buildState = serializers[type]
         return when (buildState) {
-            null -> getFragmentSerializer(klass)::class.jvmType
+            null -> getFragmentSerializer(type)::class.jvmType
             is BuildState.Building -> buildState.classType
             is BuildState.Built -> buildState.inst::class.jvmType
             is BuildState.Initialized -> buildState.inst::class.jvmType
@@ -38,12 +38,13 @@ internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoade
     }
 
     @Suppress("UNCHECKED_CAST")
-    inline fun <reified T> getFragmentSerializer() = getFragmentSerializer(T::class.java) as FragmentSerializer<T>
+    inline fun <reified T> getFragmentSerializer(vararg typeArguments: Type) =
+            getFragmentSerializer(sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl.make(
+                    T::class.java, typeArguments, null)) as FragmentSerializer<T>
 
     private val lockObject = Any()
 
-    fun getFragmentSerializer(klass: Class<*>): FragmentSerializer<*> {
-        val type = klass.jvmType
+    fun getFragmentSerializer(type: Type): FragmentSerializer<*> {
         val state = serializers[type]
         if (state is BuildState.Initialized)
             return state.inst as FragmentSerializer<*>
@@ -52,7 +53,7 @@ internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoade
             val state = serializers[type]
             when (state) {
                 null -> {
-                    val builder = getSerializerBuilder(klass)
+                    val builder = getSerializerBuilder(type)
                     serializers[type] = BuildState.Building(builder.classType)
                     serializerToTypeMap[builder.classType] = type
                     val fragmentSerializer = builder.build()
@@ -68,30 +69,35 @@ internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoade
         }
     }
 
-    private fun getSerializerBuilder(klass: Class<*>) = when {
-        klass.jvmPrimitiveType != null ->
-            PrimitivesSerializerBuilder(classLoader, this, klass)
+    private fun getSerializerBuilder(type: Type) = type.klass.let {
+        when {
+            it.jvmPrimitiveType != null ->
+                PrimitivesSerializerBuilder(classLoader, this, type)
 
-        klass.isArray ->
-            if (klass.componentType.jvmPrimitiveType != null)
-                PrimitivesArraySerializerBuilder(classLoader, this, klass)
-            else
-                ArraySerializerBuilder(classLoader, this, klass)
+            it.isArray ->
+                if (it.componentType.jvmPrimitiveType != null)
+                    PrimitivesArraySerializerBuilder(classLoader, this, type)
+                else
+                    ArraySerializerBuilder(classLoader, this, type)
 
-        klass.jvmType.isBox ->
-            BoxesSerializerBuilder(classLoader, this, klass)
+            it.jvmType.isBox ->
+                BoxesSerializerBuilder(classLoader, this, type)
 
-        klass.isEnum ->
-            EnumSerializerBuilder(classLoader, this, klass)
+            it.isEnum ->
+                EnumSerializerBuilder(classLoader, this, type)
 
-        else -> ClassSerializerBuilder(classLoader, this, klass)
+            it.superclass == Tuple::class.java ->
+                TupleSerializerBuilder(classLoader, this, type)
+
+            else -> ClassSerializerBuilder(classLoader, this, type)
+        }
     }
 
-    private fun initialize(type: JVMType) {
+    private fun initialize(type: Type) {
         dfs(type, mutableSetOf())
     }
 
-    private fun dfs(type: JVMType, visited: MutableSet<JVMType>) {
+    private fun dfs(type: Type, visited: MutableSet<Type>) {
         visited.add(type)
         val state = serializers[type]
         when (state) {

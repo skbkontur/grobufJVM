@@ -16,7 +16,7 @@ class TestStrings {
     fun testSimple() {
         val str = "zzz"
         val data = serializer.serialize(str)
-        val readStr = serializer.deserialize(String::class.java, data)
+        val readStr = serializer.deserialize(data, String::class.java)
         assertEquals(str, readStr)
     }
 
@@ -24,7 +24,7 @@ class TestStrings {
     fun testEmpty() {
         val str = ""
         val data = serializer.serialize(str)
-        val readStr = serializer.deserialize(String::class.java, data)
+        val readStr = serializer.deserialize(data, String::class.java)
         assertEquals(str, readStr)
     }
 }

@@ -15,64 +15,64 @@ class TestPrimitives {
     @Test
     fun testByte() {
         val x = 100.toByte()
-        val data = serializer.serialize(Byte::class.java, x)
-        val readX = serializer.deserialize(Byte::class.java, data)
+        val data = serializer.serialize(x, Byte::class.java)
+        val readX = serializer.deserialize(data, Byte::class.java)
         assertEquals(x, readX)
     }
 
     @Test
     fun testShort() {
         val x = 10_000.toShort()
-        val data = serializer.serialize(Short::class.java, x)
-        val readX = serializer.deserialize(Short::class.java, data)
+        val data = serializer.serialize(x, Short::class.java)
+        val readX = serializer.deserialize(data, Short::class.java)
         assertEquals(x, readX)
     }
 
     @Test
     fun testInt() {
         val x = 1000_000_000
-        val data = serializer.serialize(Int::class.java, x)
-        val readX = serializer.deserialize(Int::class.java, data)
+        val data = serializer.serialize(x, Int::class.java)
+        val readX = serializer.deserialize(data, Int::class.java)
         assertEquals(x, readX)
     }
 
     @Test
     fun testLong() {
         val x = 10_000_000_000
-        val data = serializer.serialize(Long::class.java, x)
-        val readX = serializer.deserialize(Long::class.java, data)
+        val data = serializer.serialize(x, Long::class.java)
+        val readX = serializer.deserialize(data, Long::class.java)
         assertEquals(x, readX)
     }
 
     @Test
     fun testBoolean() {
         val x = true
-        val data = serializer.serialize(Boolean::class.java, x)
-        val readX = serializer.deserialize(Boolean::class.java, data)
+        val data = serializer.serialize(x, Boolean::class.java)
+        val readX = serializer.deserialize(data, Boolean::class.java)
         assertEquals(x, readX)
     }
 
     @Test
     fun testChar() {
         val x = 'z'
-        val data = serializer.serialize(Char::class.java, x)
-        val readX = serializer.deserialize(Char::class.java, data)
+        val data = serializer.serialize(x, Char::class.java)
+        val readX = serializer.deserialize(data, Char::class.java)
         assertEquals(x, readX)
     }
 
     @Test
     fun testFloat() {
         val x = 3.14159f
-        val data = serializer.serialize(Float::class.java, x)
-        val readX = serializer.deserialize(Float::class.java, data)
+        val data = serializer.serialize(x, Float::class.java)
+        val readX = serializer.deserialize(data, Float::class.java)
         assertEquals(x, readX, 1e-8f)
     }
 
     @Test
     fun testDouble() {
         val x = 2.718281828459045
-        val data = serializer.serialize(Double::class.java, x)
-        val readX = serializer.deserialize(Double::class.java, data)
+        val data = serializer.serialize(x, Double::class.java)
+        val readX = serializer.deserialize(data, Double::class.java)
         assertEquals(x, readX, 1e-10)
     }
 }
