@@ -15,7 +15,7 @@ private sealed class BuildState {
 }
 
 internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoader) {
-    private val serializers = mutableMapOf<JVMType, BuildState>(
+    private val serializers = concurrentMapOf<JVMType, BuildState>(
             String::class.jvmType to BuildState.Initialized(StringSerializer())
     )
     private val serializerToTypeMap = mutableMapOf<JVMType, JVMType>()
@@ -40,23 +40,31 @@ internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoade
     @Suppress("UNCHECKED_CAST")
     inline fun <reified T> getFragmentSerializer() = getFragmentSerializer(T::class.java) as FragmentSerializer<T>
 
+    private val lockObject = Any()
+
     fun getFragmentSerializer(klass: Class<*>): FragmentSerializer<*> {
         val type = klass.jvmType
         val state = serializers[type]
-        when (state) {
-            null -> {
-                val builder = getSerializerBuilder(klass)
-                serializers[type] = BuildState.Building(builder.classType)
-                serializerToTypeMap[builder.classType] = type
-                val fragmentSerializer = builder.build()
-                serializers[type] = BuildState.Built(fragmentSerializer,
-                        builder.argumentsOfInitialize.map { serializerToTypeMap[it]!! }
-                )
-                initialize(type)
-                return fragmentSerializer
+        if (state is BuildState.Initialized)
+            return state.inst as FragmentSerializer<*>
+        synchronized(lockObject) {
+            @Suppress("NAME_SHADOWING")
+            val state = serializers[type]
+            when (state) {
+                null -> {
+                    val builder = getSerializerBuilder(klass)
+                    serializers[type] = BuildState.Building(builder.classType)
+                    serializerToTypeMap[builder.classType] = type
+                    val fragmentSerializer = builder.build()
+                    serializers[type] = BuildState.Built(fragmentSerializer,
+                            builder.argumentsOfInitialize.map { serializerToTypeMap[it]!! }
+                    )
+                    initialize(type)
+                    return fragmentSerializer
+                }
+                is BuildState.Initialized -> return state.inst as FragmentSerializer<*>
+                else -> throw IllegalStateException("Writer for $type is not initialized")
             }
-            is BuildState.Initialized -> return state.inst as FragmentSerializer<*>
-            else -> throw IllegalStateException("Writer for $type is not initialized")
         }
     }
 

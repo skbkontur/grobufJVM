@@ -81,3 +81,6 @@ internal class HashCalculator(seed: Int, val maxLength: Int) {
         fun calcHash(str: String) = calculator.calcHash(str)
     }
 }
+
+internal fun <K, V> concurrentMapOf(vararg pairs: Pair<K, V>): MutableMap<K, V>
+        = java.util.concurrent.ConcurrentHashMap<K, V>().apply { putAll(pairs) }
