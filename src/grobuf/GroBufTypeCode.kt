@@ -18,7 +18,7 @@ enum class GroBufTypeCode(val value: Byte, val length: Int) {
     Double(12, 8),
     Decimal(13, 16),
     String(14, -1),
-    //Guid(15, 16),
+    Guid(15, 16),
     Enum(16, 8),
     Boolean(17, 1),
     //DateTimeOld(18), not supported for now.
@@ -77,6 +77,7 @@ private val groBufTypeCodeMap = mapOf(
         String::class.java              to GroBufTypeCode.String,
         Decimal::class.java             to GroBufTypeCode.Decimal,
         Date::class.java                to GroBufTypeCode.DateTimeNew,
+        UUID::class.java                to GroBufTypeCode.Guid,
         HashMap::class.java             to GroBufTypeCode.Dictionary,
         LinkedHashMap::class.java       to GroBufTypeCode.Dictionary,
         TreeMap::class.java             to GroBufTypeCode.Dictionary
