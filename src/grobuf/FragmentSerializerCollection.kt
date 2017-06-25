@@ -2,6 +2,7 @@ package grobuf
 
 import grobuf.serializers.*
 import java.lang.reflect.Type
+import java.util.*
 
 internal class DynamicClassesLoader : ClassLoader() {
     fun loadClass(name: String, byteCode: ByteArray): Class<*> {
@@ -11,7 +12,7 @@ internal class DynamicClassesLoader : ClassLoader() {
 
 private sealed class BuildState {
     class Building(val classType: JVMType): BuildState()
-    class Built(val inst: FragmentSerializer<*>, val requiredBuilders: List<Type>): BuildState()
+    class Built(val inst: FragmentSerializer<*>, val requiredSerializers: List<Type>): BuildState()
     class Initialized(val inst: FragmentSerializer<*>): BuildState()
 }
 
@@ -58,20 +59,10 @@ internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoade
             @Suppress("NAME_SHADOWING")
             val state = serializers[type]
             when (state) {
-                null -> {
-                    val builder = getSerializerBuilder(type)
-                    serializers[type] = BuildState.Building(builder.classType)
-                    serializerToTypeMap[builder.classType] = type
-                    val fragmentSerializer = builder.build()
-                    serializers[type] = BuildState.Built(fragmentSerializer,
-                            builder.argumentsOfInitialize.map { serializerToTypeMap[it]!! }
-                    )
-                    initialize(type)
-                    return fragmentSerializer
-                }
+                null -> return buildSerializer(type)
 
                 is BuildState.Built -> {
-                    state.requiredBuilders.forEach { getFragmentSerializerType(it) }
+                    state.requiredSerializers.forEach { getFragmentSerializerType(it) }
                     initialize(type)
                     return state.inst
                 }
@@ -83,28 +74,64 @@ internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoade
         }
     }
 
-    private fun getSerializerBuilder(type: Type) = type.klass.let {
+    private fun buildSerializer(type: Type) = type.klass.let {
         when {
             it.jvmPrimitiveType != null ->
-                PrimitivesSerializerBuilder(classLoader, this, type)
+                buildSerializer(type, PrimitivesSerializerBuilder(classLoader, this, type))
 
             it.isArray ->
                 if (it.componentType.jvmPrimitiveType != null)
-                    PrimitivesArraySerializerBuilder(classLoader, this, type)
+                    buildSerializer(type, PrimitivesArraySerializerBuilder(classLoader, this, type))
                 else
-                    ArraySerializerBuilder(classLoader, this, type)
+                    buildSerializer(type, ArraySerializerBuilder(classLoader, this, type))
 
             it.jvmType.isBox ->
-                BoxesSerializerBuilder(classLoader, this, type)
+                buildSerializer(type, BoxesSerializerBuilder(classLoader, this, type))
 
             it.isEnum ->
-                EnumSerializerBuilder(classLoader, this, type)
+                buildSerializer(type, EnumSerializerBuilder(classLoader, this, type))
 
             it.superclass == Tuple::class.java ->
-                TupleSerializerBuilder(classLoader, this, type)
+                buildSerializer(type, TupleSerializerBuilder(classLoader, this, type))
 
-            else -> ClassSerializerBuilder(classLoader, this, type)
+            it == HashMap::class.java ->
+                initSerializer(type, getArgumentsForMap(type), HashMapSerializer())
+
+            it == LinkedHashMap::class.java ->
+                initSerializer(type, getArgumentsForMap(type), LinkedHashMapSerializer())
+
+            it == TreeMap::class.java ->
+                initSerializer(type, getArgumentsForMap(type), TreeMapSerializer())
+
+            else -> buildSerializer(type, ClassSerializerBuilder(classLoader, this, type))
         }
+    }
+
+    private fun getArgumentsForMap(type: Type) = type.typeArguments.let {
+        listOf(
+                it.elementAtOrNull(0) ?: Any::class.java,
+                it.elementAtOrNull(1) ?: Any::class.java
+        )
+    }
+
+    private fun buildSerializer(type: Type, builder: ClassBuilder<FragmentSerializer<*>>): FragmentSerializer<*> {
+        serializers[type] = BuildState.Building(builder.classType)
+        serializerToTypeMap[builder.classType] = type
+        val serializer = builder.build()
+        serializers[type] = BuildState.Built(serializer,
+                builder.argumentsOfInitialize.map { serializerToTypeMap[it]!! }
+        )
+        initialize(type)
+        return serializer
+    }
+
+    private fun initSerializer(type: Type, requiredSerializers: List<Type>, serializer: FragmentSerializer<*>)
+            : FragmentSerializer<*> {
+        serializerToTypeMap[serializer::class.jvmType] = type
+        serializers[type] = BuildState.Built(serializer, requiredSerializers)
+        requiredSerializers.forEach{ getFragmentSerializerType(it) }
+        initialize(type)
+        return serializer
     }
 
     private fun initialize(type: Type) {
@@ -120,21 +147,21 @@ internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoade
             is BuildState.Initialized -> return
 
             is BuildState.Built -> {
-                val requiredBuilders = state.requiredBuilders
-                requiredBuilders.forEach {
+                val requiredSerializers = state.requiredSerializers
+                requiredSerializers.forEach {
                     if (!visited.contains(it))
                         dfs(it, visited)
                 }
-                val instances = requiredBuilders.map {
+                val instances = requiredSerializers.map {
                     if (it == type)
                         state.inst // A loop.
                     else {
-                        val requiredBuilderState = serializers[it]
-                        when (requiredBuilderState) {
+                        val requiredSerializerState = serializers[it]
+                        when (requiredSerializerState) {
                             null -> error("Serializer for $it has not been created")
                             is BuildState.Building -> return // A cycle.
-                            is BuildState.Built -> requiredBuilderState.inst
-                            is BuildState.Initialized -> requiredBuilderState.inst
+                            is BuildState.Built -> requiredSerializerState.inst
+                            is BuildState.Initialized -> requiredSerializerState.inst
                         }
                     }
                 }

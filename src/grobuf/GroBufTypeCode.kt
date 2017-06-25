@@ -1,5 +1,7 @@
 package grobuf
 
+import java.util.*
+
 enum class GroBufTypeCode(val value: Byte, val length: Int) {
     Empty(0, 1),
     Object(1, -1),
@@ -31,7 +33,7 @@ enum class GroBufTypeCode(val value: Byte, val length: Int) {
     SingleArray(27, -1),
     DoubleArray(28, -1),
     BooleanArray(29, -1),
-    //Dictionary(30, -1),
+    Dictionary(30, -1),
     //DateTimeNew(31, 8),
     //Reference(32),
     //DateTimeOffset(33),
@@ -73,7 +75,10 @@ private val groBufTypeCodeMap = mapOf(
         FloatArray::class.java          to GroBufTypeCode.SingleArray,
         DoubleArray::class.java         to GroBufTypeCode.DoubleArray,
         String::class.java              to GroBufTypeCode.String,
-        Decimal::class.java             to GroBufTypeCode.Decimal
+        Decimal::class.java             to GroBufTypeCode.Decimal,
+        HashMap::class.java             to GroBufTypeCode.Dictionary,
+        LinkedHashMap::class.java       to GroBufTypeCode.Dictionary,
+        TreeMap::class.java             to GroBufTypeCode.Dictionary
 )
 
 internal val Class<*>.groBufTypeCode: GroBufTypeCode
