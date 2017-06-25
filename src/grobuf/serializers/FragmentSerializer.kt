@@ -11,19 +11,19 @@ class ReadContext(@JvmField var data: ByteArray, @JvmField var index: Int) {
     constructor(): this(ByteArray(0), 0)
 }
 
-private val theUnsafe = Unsafe::class.java.getDeclaredField("theUnsafe").let {
+internal val theUnsafe = Unsafe::class.java.getDeclaredField("theUnsafe").let {
     it.isAccessible = true
     it.get(null) as Unsafe
 }
 
-private val byteArrayDataOffset    = theUnsafe.arrayBaseOffset(ByteArray::class.java).toLong()
-private val shortArrayDataOffset   = theUnsafe.arrayBaseOffset(ShortArray::class.java).toLong()
-private val intArrayDataOffset     = theUnsafe.arrayBaseOffset(IntArray::class.java).toLong()
-private val longArrayDataOffset    = theUnsafe.arrayBaseOffset(LongArray::class.java).toLong()
-private val charArrayDataOffset    = theUnsafe.arrayBaseOffset(CharArray::class.java).toLong()
-private val booleanArrayDataOffset = theUnsafe.arrayBaseOffset(BooleanArray::class.java).toLong()
-private val floatArrayDataOffset   = theUnsafe.arrayBaseOffset(FloatArray::class.java).toLong()
-private val doubleArrayDataOffset  = theUnsafe.arrayBaseOffset(DoubleArray::class.java).toLong()
+internal val byteArrayDataOffset    = theUnsafe.arrayBaseOffset(ByteArray::class.java).toLong()
+internal val shortArrayDataOffset   = theUnsafe.arrayBaseOffset(ShortArray::class.java).toLong()
+internal val intArrayDataOffset     = theUnsafe.arrayBaseOffset(IntArray::class.java).toLong()
+internal val longArrayDataOffset    = theUnsafe.arrayBaseOffset(LongArray::class.java).toLong()
+internal val charArrayDataOffset    = theUnsafe.arrayBaseOffset(CharArray::class.java).toLong()
+internal val booleanArrayDataOffset = theUnsafe.arrayBaseOffset(BooleanArray::class.java).toLong()
+internal val floatArrayDataOffset   = theUnsafe.arrayBaseOffset(FloatArray::class.java).toLong()
+internal val doubleArrayDataOffset  = theUnsafe.arrayBaseOffset(DoubleArray::class.java).toLong()
 
 @Suppress("unused")
 internal abstract class FragmentSerializer<T> {
