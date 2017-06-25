@@ -14,7 +14,7 @@ enum class GroBufTypeCode(val value: Byte, val length: Int) {
     UInt64(10, 8),
     Single(11, 4),
     Double(12, 8),
-    //Decimal(13, 16),
+    Decimal(13, 16),
     String(14, -1),
     //Guid(15, 16),
     Enum(16, 8),
@@ -72,7 +72,8 @@ private val groBufTypeCodeMap = mapOf(
         BooleanArray::class.java        to GroBufTypeCode.BooleanArray,
         FloatArray::class.java          to GroBufTypeCode.SingleArray,
         DoubleArray::class.java         to GroBufTypeCode.DoubleArray,
-        String::class.java              to GroBufTypeCode.String
+        String::class.java              to GroBufTypeCode.String,
+        Decimal::class.java             to GroBufTypeCode.Decimal
 )
 
 internal val Class<*>.groBufTypeCode: GroBufTypeCode

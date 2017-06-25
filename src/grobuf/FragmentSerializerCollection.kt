@@ -11,19 +11,25 @@ internal class DynamicClassesLoader : ClassLoader() {
 
 private sealed class BuildState {
     class Building(val classType: JVMType): BuildState()
-    class Built(val inst: Any, val requiredBuilders: List<Type>): BuildState()
-    class Initialized(val inst: Any): BuildState()
+    class Built(val inst: FragmentSerializer<*>, val requiredBuilders: List<Type>): BuildState()
+    class Initialized(val inst: FragmentSerializer<*>): BuildState()
 }
 
 internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoader) {
     private val serializers = concurrentMapOf<Type, BuildState>(
-            String::class.java to BuildState.Initialized(StringSerializer())
+            String::class.java to BuildState.Initialized(StringSerializer()),
+            Decimal::class.java to BuildState.Built(DecimalSerializer(), DecimalSerializer.requiredTypes)
     )
     private val serializerToTypeMap = mutableMapOf<JVMType, Type>()
 
     init {
         serializers.forEach { type, writer ->
-            serializerToTypeMap += (writer as BuildState.Initialized).inst::class.jvmType to type
+            val inst = when (writer) {
+                is BuildState.Building -> error("Prewritten serializers cannot be being built")
+                is BuildState.Built -> writer.inst
+                is BuildState.Initialized -> writer.inst
+            }
+            serializerToTypeMap += inst::class.jvmType to type
         }
     }
 
@@ -47,7 +53,7 @@ internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoade
     fun getFragmentSerializer(type: Type): FragmentSerializer<*> {
         val state = serializers[type]
         if (state is BuildState.Initialized)
-            return state.inst as FragmentSerializer<*>
+            return state.inst
         synchronized(lockObject) {
             @Suppress("NAME_SHADOWING")
             val state = serializers[type]
@@ -63,8 +69,16 @@ internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoade
                     initialize(type)
                     return fragmentSerializer
                 }
-                is BuildState.Initialized -> return state.inst as FragmentSerializer<*>
-                else -> throw IllegalStateException("Writer for $type is not initialized")
+
+                is BuildState.Built -> {
+                    state.requiredBuilders.forEach { getFragmentSerializerType(it) }
+                    initialize(type)
+                    return state.inst
+                }
+
+                is BuildState.Initialized -> return state.inst
+
+                else -> error("Writer for $type is not initialized")
             }
         }
     }
@@ -101,7 +115,7 @@ internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoade
         visited.add(type)
         val state = serializers[type]
         when (state) {
-            null -> throw IllegalStateException("Serializer for $type has not been created")
+            null -> error("Serializer for $type has not been created")
             is BuildState.Building -> return
             is BuildState.Initialized -> return
 
@@ -117,15 +131,14 @@ internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoade
                     else {
                         val requiredBuilderState = serializers[it]
                         when (requiredBuilderState) {
-                            null -> throw IllegalStateException("Serializer for $it has not been created")
+                            null -> error("Serializer for $it has not been created")
                             is BuildState.Building -> return // A cycle.
                             is BuildState.Built -> requiredBuilderState.inst
                             is BuildState.Initialized -> requiredBuilderState.inst
                         }
                     }
                 }
-                val initializeMethod = state.inst::class.java.getMethod("initialize", Array<Any?>::class.java)
-                initializeMethod.invoke(state.inst, instances.toTypedArray())
+                state.inst.initialize(instances.toTypedArray())
                 serializers[type] = BuildState.Initialized(state.inst)
             }
         }

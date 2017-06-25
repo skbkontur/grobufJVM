@@ -26,13 +26,15 @@ internal val floatArrayDataOffset   = theUnsafe.arrayBaseOffset(FloatArray::clas
 internal val doubleArrayDataOffset  = theUnsafe.arrayBaseOffset(DoubleArray::class.java).toLong()
 
 @Suppress("unused")
-internal abstract class FragmentSerializer<T> {
+internal abstract class FragmentSerializer<T>() {
 
     protected val unsafe = theUnsafe
 
     abstract fun countSize(context: WriteContext, obj: T): Int
     abstract fun write(context: WriteContext, obj: T)
     abstract fun read(context: ReadContext): T
+
+    abstract fun initialize(serializers: Array<Any?>)
 
     protected fun checkTypeCode(typeCode: Int) {
         if (GroBufTypeCode.lengths[typeCode] == 0)

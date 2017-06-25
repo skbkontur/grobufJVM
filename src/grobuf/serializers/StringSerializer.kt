@@ -2,7 +2,7 @@ package grobuf.serializers
 
 import grobuf.GroBufTypeCode
 
-internal class StringSerializer: FragmentSerializer<String?>() {
+internal class StringSerializer : FragmentSerializer<String?>() {
 
     private val stringValueOffset = unsafe.objectFieldOffset(String::class.java.getDeclaredField("value"))
 
@@ -42,4 +42,6 @@ internal class StringSerializer: FragmentSerializer<String?>() {
         unsafe.putObject(str, stringValueOffset, arr)
         return str
     }
+
+    override fun initialize(serializers: Array<Any?>) { }
 }
