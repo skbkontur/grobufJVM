@@ -19,6 +19,7 @@ private sealed class BuildState {
 internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoader) {
     private val serializers = concurrentMapOf<Type, BuildState>(
             String::class.java to BuildState.Initialized(StringSerializer()),
+            Date::class.java to BuildState.Initialized(DateSerializer()),
             Decimal::class.java to BuildState.Built(DecimalSerializer(), DecimalSerializer.requiredTypes)
     )
     private val serializerToTypeMap = mutableMapOf<JVMType, Type>()

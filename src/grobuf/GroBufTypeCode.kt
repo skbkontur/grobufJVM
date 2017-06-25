@@ -34,7 +34,7 @@ enum class GroBufTypeCode(val value: Byte, val length: Int) {
     DoubleArray(28, -1),
     BooleanArray(29, -1),
     Dictionary(30, -1),
-    //DateTimeNew(31, 8),
+    DateTimeNew(31, 8),
     //Reference(32),
     //DateTimeOffset(33),
     Tuple(34, -1)
@@ -76,6 +76,7 @@ private val groBufTypeCodeMap = mapOf(
         DoubleArray::class.java         to GroBufTypeCode.DoubleArray,
         String::class.java              to GroBufTypeCode.String,
         Decimal::class.java             to GroBufTypeCode.Decimal,
+        Date::class.java                to GroBufTypeCode.DateTimeNew,
         HashMap::class.java             to GroBufTypeCode.Dictionary,
         LinkedHashMap::class.java       to GroBufTypeCode.Dictionary,
         TreeMap::class.java             to GroBufTypeCode.Dictionary
