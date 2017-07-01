@@ -1,6 +1,7 @@
 package grobuf
 
 import java.util.*
+import kotlin.collections.ArrayList
 import kotlin.collections.LinkedHashMap
 
 enum class GroBufTypeCode(val value: Byte, val length: Int, val erasedType: Class<*>? = null) {
@@ -81,7 +82,8 @@ private val groBufTypeCodeMap = mapOf(
         UUID::class.java                to GroBufTypeCode.Guid,
         HashMap::class.java             to GroBufTypeCode.Dictionary,
         LinkedHashMap::class.java       to GroBufTypeCode.Dictionary,
-        TreeMap::class.java             to GroBufTypeCode.Dictionary
+        TreeMap::class.java             to GroBufTypeCode.Dictionary,
+        ArrayList::class.java           to GroBufTypeCode.Array
 )
 
 internal val Class<*>.groBufTypeCode: GroBufTypeCode

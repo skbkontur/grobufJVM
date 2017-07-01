@@ -97,25 +97,23 @@ internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoade
             it.superclass == Tuple::class.java ->
                 buildSerializer(type, TupleSerializerBuilder(classLoader, this, type))
 
+            it == ArrayList::class.java ->
+                initSerializer(type, listOf(type.typeArgumentAt(0)), ListSerializer())
+
             it == HashMap::class.java ->
-                initSerializer(type, getArgumentsForMap(type), HashMapSerializer())
+                initSerializer(type, listOf(type.typeArgumentAt(0), type.typeArgumentAt(1)), HashMapSerializer())
 
             it == LinkedHashMap::class.java ->
-                initSerializer(type, getArgumentsForMap(type), LinkedHashMapSerializer())
+                initSerializer(type, listOf(type.typeArgumentAt(0), type.typeArgumentAt(1)), LinkedHashMapSerializer())
 
             it == TreeMap::class.java ->
-                initSerializer(type, getArgumentsForMap(type), TreeMapSerializer())
+                initSerializer(type, listOf(type.typeArgumentAt(0), type.typeArgumentAt(1)), TreeMapSerializer())
 
             else -> buildSerializer(type, ClassSerializerBuilder(classLoader, this, type))
         }
     }
 
-    private fun getArgumentsForMap(type: Type) = type.typeArguments.let {
-        listOf(
-                it.elementAtOrNull(0) ?: Any::class.java,
-                it.elementAtOrNull(1) ?: Any::class.java
-        )
-    }
+    private fun Type.typeArgumentAt(index: Int) = typeArguments.elementAtOrNull(index) ?: Any::class.java
 
     private fun buildSerializer(type: Type, builder: ClassBuilder<FragmentSerializer<*>>): FragmentSerializer<*> {
         serializers[type] = BuildState.Building(builder.classType)
