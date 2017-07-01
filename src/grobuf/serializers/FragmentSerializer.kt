@@ -1,5 +1,6 @@
 package grobuf.serializers
 
+import grobuf.DataCorruptedException
 import grobuf.GroBufTypeCode
 import sun.misc.Unsafe
 
@@ -38,7 +39,7 @@ internal abstract class FragmentSerializer<T>() {
 
     protected fun checkTypeCode(typeCode: Int) {
         if (GroBufTypeCode.lengths[typeCode] == 0)
-            throw Error("Unknown type code: $typeCode") // TODO Create DataCorruptedException.
+            throw DataCorruptedException("Unknown type code: $typeCode")
     }
 
     protected fun skipValue(typeCode: Int, context: ReadContext) {
@@ -47,8 +48,6 @@ internal abstract class FragmentSerializer<T>() {
             length = readIntSafe(context.data, context.index) + 4
         context.index += length
     }
-
-    protected fun throwBadDataLengthError(): Nothing = throw Error("Bad data length")
 
     //------------Write unsafe------------------------------------------------------------------//
 
@@ -304,7 +303,7 @@ internal abstract class FragmentSerializer<T>() {
 
     protected fun ensureSize(array: ByteArray, offset: Int, size: Int) {
         if (offset + size > array.size)
-            throw Error("Unexpected end of data") // TODO Create DataCorruptedException.
+            throw DataCorruptedException("Unexpected end of data")
     }
 
     protected fun createInstance(klass: Class<*>): Any {

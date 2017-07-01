@@ -149,9 +149,7 @@ internal class ArraySerializerBuilder(classLoader: DynamicClassesLoader,
         ret(klass)
 
         visitLabel(badDataLabel)
-        loadThis()
-        callVirtual0<Void>(classType, "throwBadDataLengthError")
-        ret(klass)
+        throwDataCorruptedException("Bad data length")
 
         return 5
     }

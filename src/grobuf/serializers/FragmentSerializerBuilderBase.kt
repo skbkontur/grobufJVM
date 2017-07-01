@@ -72,6 +72,16 @@ internal abstract class FragmentSerializerBuilderBase(classLoader: DynamicClasse
 
     private val occupiedSlotsCount get() = locals.last().nextSlot
 
+    protected fun MethodVisitor.throwDataCorruptedException(message: String) {
+        val exceptionType = DataCorruptedException::class.jvmType
+        visitTypeInsn(Opcodes.NEW, exceptionType.name) // stack: [new DataCorruptedException => exception]
+        visitInsn(Opcodes.DUP)                         // stack: [exception, exception]
+        visitLdcInsn(message)                          // stack: [exception, exception, message]
+        ctorCall1<String>(exceptionType)               // exception.ctor(message); stack: [exception]
+        cast(exceptionType, Throwable::class.jvmType)  // stack: [(Throwable)exception]
+        visitInsn(Opcodes.ATHROW)                      // throw (Throwable)exception; stack: []
+    }
+
     //---------- Writing -------------------------------------------------------//
 
     protected fun MethodVisitor.loadResult() {

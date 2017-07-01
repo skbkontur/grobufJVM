@@ -1,5 +1,6 @@
 package grobuf.serializers
 
+import grobuf.DataCorruptedException
 import grobuf.GroBufTypeCode
 import java.util.*
 
@@ -56,9 +57,8 @@ internal abstract class MapSerializer<TMap: MutableMap<Any?, Any?>> : FragmentSe
             val value = valueSerializer.read(context)
             result.put(key, value)
         }
-        // TODO: Grobuf exception.
         if (context.index != index + 4 + dataLength)
-            throw IllegalStateException("Bad data length")
+            throw DataCorruptedException("Bad data length")
         return result
     }
 
