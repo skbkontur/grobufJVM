@@ -29,6 +29,18 @@ class TestArrays {
     }
 
     @Test
+    fun testWithNull() {
+        val arr = arrayOf(A(42, 117), null, A(-1, 1000_000_000))
+        val data = serializer.serialize(arr)
+        val readArr = serializer.deserialize(data, Array<A?>::class.java)
+        assertEquals(arr.size, readArr.size)
+        for (i in arr.indices) {
+            assertEquals(arr[i]?.x, readArr[i]?.x)
+            assertEquals(arr[i]?.y, readArr[i]?.y)
+        }
+    }
+
+    @Test
     fun testGeneric() {
         val x = G3_(arrayOf(A(42, 117), A(-1, 1000_000_000)))
         val data = serializer.serialize(x)

@@ -21,7 +21,8 @@ internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoade
             String::class.java to BuildState.Initialized(StringSerializer()),
             Date::class.java to BuildState.Initialized(DateSerializer()),
             UUID::class.java to BuildState.Initialized(GuidSerializer()),
-            Decimal::class.java to BuildState.Built(DecimalSerializer(), DecimalSerializer.requiredTypes)
+            Decimal::class.java to BuildState.Built(DecimalSerializer(), DecimalSerializer.requiredTypes),
+            Any::class.java to BuildState.Built(AnySerializer(), AnySerializer.requiredTypes)
     )
     private val serializerToTypeMap = mutableMapOf<JVMType, Type>()
 
@@ -64,7 +65,6 @@ internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoade
                 null -> return buildSerializer(type)
 
                 is BuildState.Built -> {
-                    state.requiredSerializers.forEach { getFragmentSerializerType(it) }
                     initialize(type)
                     return state.inst
                 }
@@ -120,9 +120,8 @@ internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoade
         serializers[type] = BuildState.Building(builder.classType)
         serializerToTypeMap[builder.classType] = type
         val serializer = builder.build()
-        serializers[type] = BuildState.Built(serializer,
-                builder.argumentsOfInitialize.map { serializerToTypeMap[it]!! }
-        )
+        val requiredSerializers = builder.argumentsOfInitialize.map { serializerToTypeMap[it]!! }
+        serializers[type] = BuildState.Built(serializer, requiredSerializers)
         initialize(type)
         return serializer
     }
@@ -131,7 +130,6 @@ internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoade
             : FragmentSerializer<*> {
         serializerToTypeMap[serializer::class.jvmType] = type
         serializers[type] = BuildState.Built(serializer, requiredSerializers)
-        requiredSerializers.forEach{ getFragmentSerializerType(it) }
         initialize(type)
         return serializer
     }
@@ -144,7 +142,11 @@ internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoade
         visited.add(type)
         val state = serializers[type]
         when (state) {
-            null -> error("Serializer for $type has not been created")
+            null -> {
+                getFragmentSerializerType(type)
+                return
+            }
+
             is BuildState.Building -> return
             is BuildState.Initialized -> return
 
@@ -160,7 +162,11 @@ internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoade
                     else {
                         val requiredSerializerState = serializers[it]
                         when (requiredSerializerState) {
-                            null -> error("Serializer for $it has not been created")
+                            null -> {
+                                getFragmentSerializerType(it)
+                                return
+                            }
+
                             is BuildState.Building -> return // A cycle.
                             is BuildState.Built -> requiredSerializerState.inst
                             is BuildState.Initialized -> requiredSerializerState.inst

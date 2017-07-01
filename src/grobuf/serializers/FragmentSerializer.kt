@@ -38,12 +38,12 @@ internal abstract class FragmentSerializer<T>() {
     abstract fun initialize(serializers: Array<Any?>)
 
     protected fun checkTypeCode(typeCode: Int) {
-        if (GroBufTypeCode.lengths[typeCode] == 0)
+        if (GroBufTypeCode.lengths[typeCode and 0xFF] == 0)
             throw DataCorruptedException("Unknown type code: $typeCode")
     }
 
     protected fun skipValue(typeCode: Int, context: ReadContext) {
-        var length = GroBufTypeCode.lengths[typeCode]
+        var length = GroBufTypeCode.lengths[typeCode and 0xFF]
         if (length < 0)
             length = readIntSafe(context.data, context.index) + 4
         context.index += length
