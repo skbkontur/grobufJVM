@@ -83,7 +83,9 @@ private val groBufTypeCodeMap = mapOf(
         HashMap::class.java             to GroBufTypeCode.Dictionary,
         LinkedHashMap::class.java       to GroBufTypeCode.Dictionary,
         TreeMap::class.java             to GroBufTypeCode.Dictionary,
-        ArrayList::class.java           to GroBufTypeCode.Array
+        ArrayList::class.java           to GroBufTypeCode.Array,
+        HashSet::class.java             to GroBufTypeCode.Array,
+        TreeSet::class.java             to GroBufTypeCode.Array
 )
 
 internal val Class<*>.groBufTypeCode: GroBufTypeCode

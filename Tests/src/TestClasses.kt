@@ -5,7 +5,14 @@ import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 
-class A(@JvmField var x: Int, @JvmField var y: Int)
+data class A(@JvmField var x: Int, @JvmField var y: Int): Comparable<A> {
+    override fun compareTo(other: A): Int {
+        val result = x.compareTo(other.x)
+        if (result != 0) return result
+        return y.compareTo(other.y)
+    }
+}
+
 class A2(@JvmField var y: Int, @JvmField var x: Int)
 class A3(@JvmField var y: Int)
 class A4(@JvmField var x: Int, @JvmField var z: Int, @JvmField var y: Int)

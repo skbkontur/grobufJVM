@@ -100,6 +100,12 @@ internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoade
             it == ArrayList::class.java ->
                 initSerializer(type, listOf(type.typeArgumentAt(0)), ListSerializer())
 
+            it == HashSet::class.java ->
+                initSerializer(type, listOf(type.typeArgumentAt(0)), HashSetSerializer())
+
+            it == TreeSet::class.java ->
+                initSerializer(type, listOf(type.typeArgumentAt(0)), TreeSetSerializer())
+
             it == HashMap::class.java ->
                 initSerializer(type, listOf(type.typeArgumentAt(0), type.typeArgumentAt(1)), HashMapSerializer())
 
