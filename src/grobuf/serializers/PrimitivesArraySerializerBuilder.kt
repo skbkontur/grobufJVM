@@ -51,7 +51,11 @@ internal class PrimitivesArraySerializerBuilder(classLoader: DynamicClassesLoade
     private val JVMPrimitive.readArraySafeMethodName get() = "read${javaName.capitalize()}ArraySafe"
 
     override fun MethodVisitor.readNotNull(): Int {
-        assertTypeCode(klass.groBufTypeCode)
+        val unsignedArrayTypeCode = getUnsignedArrayTypeCode(klass.groBufTypeCode)
+        if (unsignedArrayTypeCode == null)
+            assertTypeCode(klass.groBufTypeCode)
+        else
+            assertTypeCode(klass.groBufTypeCode, unsignedArrayTypeCode)
         readSafe<Int>()                                                                  // stack: [*(int*)data[index] => length]
         visitInsn(Opcodes.DUP)                                                           // stack: [length, length]
         val length = declareLocal<Int>()
@@ -73,5 +77,13 @@ internal class PrimitivesArraySerializerBuilder(classLoader: DynamicClassesLoade
         loadLocal(result)
         ret(klass)
         return 4
+    }
+
+    private fun getUnsignedArrayTypeCode(typeCode: GroBufTypeCode) = when (typeCode) {
+        GroBufTypeCode.Int8Array -> GroBufTypeCode.UInt8Array
+        GroBufTypeCode.Int16Array -> GroBufTypeCode.UInt16Array
+        GroBufTypeCode.Int32Array -> GroBufTypeCode.UInt32Array
+        GroBufTypeCode.Int64Array -> GroBufTypeCode.UInt64Array
+        else -> null
     }
 }

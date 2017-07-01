@@ -1,7 +1,9 @@
 package grobuf
 
 import org.objectweb.asm.ClassVisitor
+import org.objectweb.asm.Label
 import org.objectweb.asm.MethodVisitor
+import org.objectweb.asm.Opcodes.*
 import org.objectweb.asm.Opcodes
 import java.lang.reflect.Type
 import kotlin.reflect.KClass
@@ -33,6 +35,84 @@ internal fun MethodVisitor.cast(from: JVMType, to: JVMType) {
         }
     }
 }
+
+internal fun MethodVisitor.coerce(from: JVMPrimitive, to: JVMPrimitive) {
+    if (from == to) return
+    if (to != JVMPrimitive.BOOLEAN) {
+        coercions[from.ordinal][to.ordinal].forEach { visitInsn(it) }
+        return
+    }
+    @Suppress("NON_EXHAUSTIVE_WHEN")
+    when (from) {
+        JVMPrimitive.BYTE,
+        JVMPrimitive.SHORT,
+        JVMPrimitive.INT,
+        JVMPrimitive.CHAR -> {
+            val falseLabel = Label()
+            visitLdcInsn(0)
+            visitJumpInsn(IF_ICMPEQ, falseLabel)
+            visitLdcInsn(1)
+            val doneLabel = Label()
+            visitJumpInsn(GOTO, doneLabel)
+            visitLabel(falseLabel)
+            visitLdcInsn(0)
+            visitLabel(doneLabel)
+        }
+
+        JVMPrimitive.LONG -> {
+            visitLdcInsn(0L)
+            visitInsn(LCMP)
+            val falseLabel = Label()
+            visitJumpInsn(IFEQ, falseLabel)
+            visitLdcInsn(1)
+            val doneLabel = Label()
+            visitJumpInsn(GOTO, doneLabel)
+            visitLabel(falseLabel)
+            visitLdcInsn(0)
+            visitLabel(doneLabel)
+        }
+
+        JVMPrimitive.FLOAT -> {
+            visitLdcInsn(0.0f)
+            visitInsn(FCMPG)
+            val falseLabel = Label()
+            visitJumpInsn(IFEQ, falseLabel)
+            visitLdcInsn(1)
+            val doneLabel = Label()
+            visitJumpInsn(GOTO, doneLabel)
+            visitLabel(falseLabel)
+            visitLdcInsn(0)
+            visitLabel(doneLabel)
+        }
+
+        JVMPrimitive.DOUBLE -> {
+            visitLdcInsn(0.0)
+            visitInsn(DCMPG)
+            val falseLabel = Label()
+            visitJumpInsn(IFEQ, falseLabel)
+            visitLdcInsn(1)
+            val doneLabel = Label()
+            visitJumpInsn(GOTO, doneLabel)
+            visitLabel(falseLabel)
+            visitLdcInsn(0)
+            visitLabel(doneLabel)
+        }
+    }
+}
+
+private fun ops(vararg opcodes: Int) = opcodes
+
+private val coercions = arrayOf(
+        //                        BYTE           SHORT         INT      LONG    BOOL    CHAR            FLAT     DOUBLE
+        /* BYTE    */ arrayOf(ops()        , ops(I2S)     , ops()   , ops(I2L), ops(), ops(I2C)     , ops(I2F), ops(I2D)),
+        /* SHORT   */ arrayOf(ops(I2B)     , ops()        , ops()   , ops(I2L), ops(), ops(I2C)     , ops(I2F), ops(I2D)),
+        /* INT     */ arrayOf(ops(I2B)     , ops(I2S)     , ops()   , ops(I2L), ops(), ops(I2C)     , ops(I2F), ops(I2D)),
+        /* LONG    */ arrayOf(ops(L2I, I2B), ops(L2I, I2S), ops(L2I), ops()   , ops(), ops(L2I, I2C), ops(L2F), ops(L2D)),
+        /* BOOLEAN */ arrayOf(ops()        , ops()        , ops()   , ops(I2L), ops(), ops()        , ops(I2F), ops(I2D)),
+        /* CHAR    */ arrayOf(ops(I2B)     , ops(I2S)     , ops()   , ops(I2L), ops(), ops()        , ops(I2F), ops(I2D)),
+        /* FLOAT   */ arrayOf(ops(F2I, I2B), ops(F2I, I2S), ops(F2I), ops(F2L), ops(), ops(F2I, I2C), ops()   , ops(F2D)),
+        /* DOUBLE  */ arrayOf(ops(D2I, I2B), ops(D2I, I2S), ops(D2I), ops(D2L), ops(), ops(D2I, I2C), ops(D2F), ops())
+)
 
 private fun MethodVisitor.ret(jvmPrimitive: JVMPrimitive?) {
     val opcode = when (jvmPrimitive) {

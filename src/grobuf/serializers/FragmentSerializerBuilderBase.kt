@@ -261,11 +261,13 @@ internal abstract class FragmentSerializerBuilderBase(classLoader: DynamicClasse
         }
     }
 
-    protected fun MethodVisitor.assertTypeCode(expectedTypeCode: GroBufTypeCode) {
-        loadTypeCode()                                               // stack: [typeCode]
-        visitLdcInsn(expectedTypeCode.value)                         // stack: [typeCode, expectedTypeCode]
+    protected fun MethodVisitor.assertTypeCode(vararg expectedTypeCode: GroBufTypeCode) {
         val okLabel = Label()
-        visitJumpInsn(Opcodes.IF_ICMPEQ, okLabel)                    // if (typeCode == expectedTypeCode) goto ok; stack: []
+        expectedTypeCode.forEach {
+            loadTypeCode()                                           // stack: [typeCode]
+            visitLdcInsn(it.value)                                   // stack: [typeCode, expectedTypeCode]
+            visitJumpInsn(Opcodes.IF_ICMPEQ, okLabel)                // if (typeCode == expectedTypeCode) goto ok; stack: []
+        }
         loadThis()                                                   // stack: [this]
         loadTypeCode()                                               // stack: [this, typeCode]
         loadContext()                                                // stack: [this, typeCode, context]

@@ -1,7 +1,9 @@
 package grobuf.serializers
 
 import grobuf.*
+import org.objectweb.asm.Label
 import org.objectweb.asm.MethodVisitor
+import org.objectweb.asm.Opcodes
 import java.lang.reflect.Type
 
 internal class BoxesSerializerBuilder(classLoader: DynamicClassesLoader,
@@ -30,10 +32,37 @@ internal class BoxesSerializerBuilder(classLoader: DynamicClassesLoader,
     }
 
     override fun MethodVisitor.readNotNull(): Int {
-        // TODO: Coercion between primitives.
-        readSafe(jvmPrimitiveType.klass)                   // stack: [this.read<type>Safe(result, index)]
-        cast(jvmPrimitiveType.jvmType, Any::class.jvmType) // stack: [this.read<type>Sage(result, index).box()]
-        ret(klass)                                         // return this.read<type>Sage(result, index).box(); stack: []
+        val doCoercionLabel = Label()
+        loadTypeCode()                                         // stack: [typeCode]
+        visitLdcInsn(klass.groBufTypeCode.value)               // stack: [typeCode, expectedTypeCode]
+        visitJumpInsn(Opcodes.IF_ICMPNE, doCoercionLabel)      // if (typeCode != expectedTypeCode) goto doCoercion; stack: []
+
+        readSafe(jvmPrimitiveType.klass)                       // stack: [this.read<type>Safe(result, index)]
+        cast(jvmPrimitiveType.jvmType, Any::class.jvmType)     // stack: [this.read<type>Sage(result, index).box()]
+        ret(klass)                                             // return this.read<type>Safe(result, index); stack: []
+
+        visitLabel(doCoercionLabel)
+        val primitives = enumValues<JVMPrimitive>()
+                .filterNot { it == JVMPrimitive.VOID || it.klass == klass }
+                .map { it to (it.klass.groBufTypeCode.value.toInt() and 0xFF) }
+                .sortedBy { it.second }
+        val defaultLabel = Label()
+        val labels = primitives.map { Label() }.toTypedArray()
+        loadTypeCode()                                         // stack: [typeCode]
+        visitLookupSwitchInsn(defaultLabel,
+                primitives.map { it.second }.toIntArray(),
+                labels)                                        // switch(typeCode); stack: []
+        primitives.forEachIndexed { index, (primitive) ->
+            visitLabel(labels[index])
+            readSafe(primitive.klass)                          // stack: [value]
+            coerce(primitive, jvmPrimitiveType)                // stack: [(klass)value]
+            cast(jvmPrimitiveType.jvmType, Any::class.jvmType) // stack: [this.read<type>Sage(result, index).box()]
+            ret(klass)
+        }
+
+        visitLabel(defaultLabel)
+        loadDefault(klass)
+        ret(klass)
         return 3
     }
 }
