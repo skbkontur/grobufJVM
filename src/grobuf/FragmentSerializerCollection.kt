@@ -16,7 +16,8 @@ private sealed class BuildState {
     class Initialized(val inst: FragmentSerializer<*>): BuildState()
 }
 
-internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoader) {
+internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoader,
+                                            val dataMembersExtractor: DataMembersExtractor) {
     private val serializers = concurrentMapOf<Type, BuildState>(
             String::class.java to BuildState.Initialized(StringSerializer()),
             Date::class.java to BuildState.Initialized(DateSerializer()),

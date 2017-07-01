@@ -51,7 +51,7 @@ internal class GroBufRandom(seed: Int) {
     }
 }
 
-internal class HashCalculator(seed: Int, val maxLength: Int) {
+class HashCalculator(seed: Int, val maxLength: Int) {
     private val randTable: Array<LongArray>
 
     init {
@@ -64,7 +64,7 @@ internal class HashCalculator(seed: Int, val maxLength: Int) {
         }
     }
 
-    fun calcHash(str: String): Long {
+    internal fun calcHash(str: String): Long {
         if (str.length > maxLength)
             throw IllegalStateException("Names with length greater than $maxLength are not supported")
         var result = 0L
@@ -78,6 +78,7 @@ internal class HashCalculator(seed: Int, val maxLength: Int) {
     companion object {
         private val calculator = HashCalculator(314159265, 1000)
 
+        @JvmStatic
         fun calcHash(str: String) = calculator.calcHash(str)
     }
 }

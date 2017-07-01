@@ -1,3 +1,4 @@
+import grobuf.GroboMember
 import grobuf.Serializer
 import grobuf.SerializerImpl
 import org.junit.Assert.*
@@ -19,6 +20,10 @@ class G1<T>(@JvmField var x: T)
 open class G2<T1, T2>(@JvmField var y1: T1, @JvmField var y2: T2)
 
 class G2_(x: Int, y: Int, z: Int): G2<Int, G1<A>>(x, G1(A(y, z)))
+
+class B1(@JvmField @GroboMember(name = "Y") var x: Int)
+class B2(@JvmField var y: Int)
+class B3(@JvmField @GroboMember(id = 7483750539695275791) var z: Int)
 
 class TestClasses {
     lateinit var serializer: Serializer
@@ -110,5 +115,21 @@ class TestClasses {
         assertNotNull(readX.y2)
         assertEquals(117, readX.y2.x)
         assertEquals(-1, readX.y2.y)
+    }
+
+    @Test
+    fun testGroboMember1() {
+        val x = B1(42)
+        val data = serializer.serialize(x)
+        val readX = serializer.deserialize(data, B2::class.java)
+        assertEquals(42, readX.y)
+    }
+
+    @Test
+    fun testGroboMember2() {
+        val x = B3(42)
+        val data = serializer.serialize(x)
+        val readX = serializer.deserialize(data, B2::class.java)
+        assertEquals(42, readX.y)
     }
 }

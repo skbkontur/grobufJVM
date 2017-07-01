@@ -1,12 +1,40 @@
 package grobuf
 
 import grobuf.serializers.*
-import sun.misc.Unsafe
 import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
 import java.lang.reflect.Field
+import java.lang.reflect.Modifier
 import java.lang.reflect.Type
-import java.nio.ByteBuffer
-import kotlin.reflect.KClass
+import kotlin.reflect.full.findAnnotation
+import kotlin.reflect.jvm.kotlinProperty
+
+class DataMember(val id: Long, val name: String, val field: Field)
+
+@Target(AnnotationTarget.FIELD, AnnotationTarget.PROPERTY)
+annotation class GroboMember(val name: String = "", val id: Long = 0)
+
+interface DataMembersExtractor {
+    fun getMembers(klass: Class<*>): List<DataMember>
+}
+
+/**
+ * Selects all public non-final non-static fields.
+ */
+class PublicFieldsExtractor(val capitalizeNames: Boolean): DataMembersExtractor {
+
+    override fun getMembers(klass: Class<*>): List<DataMember> {
+        val fields = klass.fields.filter { Modifier.isPublic(it.modifiers) }
+                .filterNot { Modifier.isStatic(it.modifiers) }
+                .filterNot { Modifier.isFinal(it.modifiers) }
+        return fields.map {
+            val groboMember = it.getDeclaredAnnotation(GroboMember::class.java)
+                    ?: it.kotlinProperty?.findAnnotation<GroboMember>()
+            val id = groboMember?.id ?: 0
+            val name = groboMember?.name ?: (if (capitalizeNames) it.name.capitalize() else it.name)
+            DataMember(id, name, it)
+        }
+    }
+}
 
 interface Serializer {
     fun <T> getSize(obj: T, klass: Class<T>, vararg typeArguments: Type): Int
@@ -16,9 +44,11 @@ interface Serializer {
     fun <T: Any> deserialize(data: ByteArray, klass: Class<T>, vararg typeArguments: Type): T
 }
 
-open class SerializerImpl: Serializer {
+open class SerializerImpl(dataMembersExtractor: DataMembersExtractor): Serializer {
 
-    private val collection = FragmentSerializerCollection(DynamicClassesLoader())
+    constructor(): this(PublicFieldsExtractor(true))
+
+    private val collection = FragmentSerializerCollection(DynamicClassesLoader(), dataMembersExtractor)
 
     override fun <T> getSize(obj: T, klass: Class<T>, vararg typeArguments: Type): Int {
         val type = if (typeArguments.isEmpty()) klass else ParameterizedTypeImpl.make(klass, typeArguments, null)

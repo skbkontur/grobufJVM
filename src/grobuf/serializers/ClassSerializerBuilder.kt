@@ -4,7 +4,6 @@ import grobuf.*
 import org.objectweb.asm.Label
 import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Opcodes
-import java.lang.reflect.Modifier
 import java.lang.reflect.Type
 
 internal class ClassSerializerBuilder(classLoader: DynamicClassesLoader,
@@ -17,29 +16,30 @@ internal class ClassSerializerBuilder(classLoader: DynamicClassesLoader,
     override fun MethodVisitor.countSizeNotNull(): Int {
         visitLdcInsn(1 /* typeCode */ + 4 /* length */)                         // stack: [5 => size]
         appropriateFields.forEach {
-            val fieldType = it.genericType.substitute(getTypeArgumentsFor(it.declaringClass))
+            val field = it.first
+            val fieldType = field.genericType.substitute(getTypeArgumentsFor(field.declaringClass))
             val fieldSerializerType = fragmentSerializerCollection.getFragmentSerializerType(fieldType)
             val fieldVisitedLabel = Label()
-            val field = declareLocal<Any>()
-            if (it.type.isReference) {
+            val fieldLocal = declareLocal<Any>()
+            if (field.type.isReference) {
                 loadObj()                                                       // stack: [size, obj]
                 visitFieldInsn(Opcodes.GETFIELD, klass.jvmType.name,
-                        it.name, it.type.jvmType.signature)                     // stack: [size, obj.field]
+                        field.name, field.type.jvmType.signature)               // stack: [size, obj.field]
                 visitInsn(Opcodes.DUP)                                          // stack: [size, obj.field, obj.field]
-                saveToLocal(field)                                              // field = obj.field; stack: [size, obj.field]
+                saveToLocal(fieldLocal)                                         // field = obj.field; stack: [size, obj.field]
                 visitJumpInsn(Opcodes.IFNULL, fieldVisitedLabel)                // if (obj.field == null) goto fieldVisited; stack: [size]
             }
             loadField(getSerializerField(fieldSerializerType))                  // stack: [size, fieldSerializer]
             loadContext()                                                       // stack: [size, fieldSerializer, context]
             if (fieldType.isReference) {
-                loadLocal(field)                                                // stack: [size, fieldSerializer, context, obj.field]
+                loadLocal(fieldLocal)                                           // stack: [size, fieldSerializer, context, obj.field]
                 cast(Any::class.jvmType, fieldType.jvmType)
             }
             else {
                 loadObj()                                                       // stack: [size, fieldSerializer, context, obj]
                 visitFieldInsn(Opcodes.GETFIELD, klass.jvmType.name,
-                        it.name, it.type.jvmType.signature)                     // stack: [size, fieldSerializer, context, obj.field]
-                cast(it.type.jvmType, fieldType.jvmType)
+                        field.name, field.type.jvmType.signature)               // stack: [size, fieldSerializer, context, obj.field]
+                cast(field.type.jvmType, fieldType.jvmType)
             }
             callVirtual(fieldSerializerType, "countSize",
                     listOf(WriteContext::class.java, fieldType), Int::class.java) // stack: [size, fieldSerializer.countSize(context, obj.field)]
@@ -59,30 +59,32 @@ internal class ClassSerializerBuilder(classLoader: DynamicClassesLoader,
         saveToLocal(start)                                                       // start = index; stack: []
         increaseIndexBy<WriteContext>(4)                                         // index += 4; stack: []
         appropriateFields.forEach {
-            val fieldType = it.genericType.substitute(getTypeArgumentsFor(it.declaringClass))
+            val field = it.first
+            val fieldId = it.second
+            val fieldType = field.genericType.substitute(getTypeArgumentsFor(field.declaringClass))
             val fieldSerializerType = fragmentSerializerCollection.getFragmentSerializerType(fieldType)
             val fieldVisitedLabel = Label()
-            val field = declareLocal<Any>()
+            val fieldLocal = declareLocal<Any>()
             if (fieldType.isReference) {
                 loadObj()                                                        // stack: [obj]
                 visitFieldInsn(Opcodes.GETFIELD, klass.jvmType.name,
-                        it.name, it.type.jvmType.signature)                      // stack: [obj.field]
+                        field.name, field.type.jvmType.signature)                // stack: [obj.field]
                 visitInsn(Opcodes.DUP)                                           // stack: [obj.field, obj.field]
-                saveToLocal(field)                                               // field = obj.field; stack: [obj.field]
+                saveToLocal(fieldLocal)                                          // field = obj.field; stack: [obj.field]
                 visitJumpInsn(Opcodes.IFNULL, fieldVisitedLabel)                 // if (obj.field == null) goto fieldVisited; stack: []
             }
-            writeSafe<Long> { visitLdcInsn(HashCalculator.calcHash(it.name)) }   // writeLongSafe(calcHash(fieldName)); stack: []
+            writeSafe<Long> { visitLdcInsn(fieldId) }                            // writeLongSafe(fieldId); stack: []
             loadField(getSerializerField(fieldSerializerType))                   // stack: [fieldSerializer]
             loadContext()                                                        // stack: [fieldSerializer, context]
             if (fieldType.isReference) {
-                loadLocal(field)                                                 // stack: [fieldSerializer, context, obj.field]
+                loadLocal(fieldLocal)                                            // stack: [fieldSerializer, context, obj.field]
                 cast(Any::class.jvmType, fieldType.jvmType)
             }
             else {
                 loadObj()                                                        // stack: [fieldSerializer, context, obj]
                 visitFieldInsn(Opcodes.GETFIELD, klass.jvmType.name,
-                        it.name, it.type.jvmType.signature)                      // stack: [fieldSerializer, context, obj.field]
-                cast(it.type.jvmType, fieldType.jvmType)
+                        field.name, field.type.jvmType.signature)                // stack: [fieldSerializer, context, obj.field]
+                cast(field.type.jvmType, fieldType.jvmType)
             }
             callVirtual(fieldSerializerType, "write",
                     listOf(WriteContext::class.java, fieldType), Void::class.java) // fieldSerializer.write(context, obj.field); stack: []
@@ -96,9 +98,7 @@ internal class ClassSerializerBuilder(classLoader: DynamicClassesLoader,
     }
 
     override fun MethodVisitor.readNotNull(): Int {
-        val fields = appropriateFields
-                .map { it to HashCalculator.calcHash(it.name) }
-                .sortedBy { it.second }
+        val fields = appropriateFields.sortedBy { it.second }
         assertTypeCode(GroBufTypeCode.Object)
 
         val parameterlessConstructor = klass.constructors.firstOrNull { it.parameterCount == 0 }
@@ -170,10 +170,13 @@ internal class ClassSerializerBuilder(classLoader: DynamicClassesLoader,
     }
 
     private val appropriateFields by lazy {
-        // TODO: DataMembersExtractor, Kotlin properties.
-        klass.fields.filter { Modifier.isPublic(it.modifiers) }
-                    .filterNot { Modifier.isStatic(it.modifiers) }
-                    .filterNot { Modifier.isFinal(it.modifiers) }
+        fragmentSerializerCollection.dataMembersExtractor.getMembers(klass).map {
+            val id = if (it.id != 0L)
+                         it.id
+                     else
+                         HashCalculator.calcHash(it.name)
+            it.field to id
+        }
     }
 
     private fun getSerializerField(type: JVMType) = serializerFields.getOrPut(type) {
