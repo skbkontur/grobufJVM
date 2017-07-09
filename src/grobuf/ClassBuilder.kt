@@ -65,8 +65,10 @@ internal abstract class ClassBuilder<out T>(val classLoader: DynamicClassesLoade
         visitFieldInsn(Opcodes.GETFIELD, classType.name, field.name, field.type.signature)
     }
 
-    protected fun MethodVisitor.genSwitch(keys: List<Long>, valueSlot: Int,
-                                                            defaultLabel: Label, caseBuilder: MethodVisitor.(Int) -> Unit) {
+    protected fun MethodVisitor.genSwitch(keys: List<Long>,
+                                          valueSlot: Int,
+                                          defaultLabel: Label,
+                                          caseBuilder: MethodVisitor.(Int) -> Unit) {
         if (keys.size <= 50)
             UnrolledBinarySearchBuilder.build(this, keys, valueSlot, defaultLabel, caseBuilder)
         else

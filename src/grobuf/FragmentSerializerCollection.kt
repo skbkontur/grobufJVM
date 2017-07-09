@@ -16,8 +16,22 @@ private sealed class BuildState {
     class Initialized(val inst: FragmentSerializer<*>): BuildState()
 }
 
+internal class FragmentSerializerFactoryImpl(val collection: FragmentSerializerCollection,
+                                             val baseSerializerBuilder: () -> FragmentSerializer<Any?>)
+    : FragmentSerializerFactory {
+
+    override val baseSerializer by lazy { baseSerializerBuilder() }
+
+    @Suppress("UNCHECKED_CAST")
+    override fun getSerializer(type: Type) =
+            collection.getFragmentSerializer(type) as FragmentSerializer<Any?>
+
+}
+
 internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoader,
-                                            val dataMembersExtractor: DataMembersExtractor) {
+                                            val dataMembersExtractor: DataMembersExtractor,
+                                            val customSerializerCollection: CustomSerializerCollection?) {
+
     private val serializers = concurrentMapOf<Type, BuildState>(
             String::class.java to BuildState.Initialized(StringSerializer()),
             Date::class.java to BuildState.Initialized(DateSerializer()),
@@ -115,7 +129,19 @@ internal class FragmentSerializerCollection(val classLoader: DynamicClassesLoade
             it == TreeMap::class.java ->
                 initSerializer(type, listOf(type.typeArgumentAt(0), type.typeArgumentAt(1)), TreeMapSerializer())
 
-            else -> buildSerializer(type, ClassSerializerBuilder(classLoader, this, type))
+            else -> {
+                @Suppress("UNCHECKED_CAST")
+                val customSerializer = customSerializerCollection?.get(
+                        type,
+                        FragmentSerializerFactoryImpl(this) {
+                            buildSerializer(type, ClassSerializerBuilder(classLoader, this, type)) as FragmentSerializer<Any?>
+                        })
+                if (customSerializer != null)
+                    //initSerializer(type, emptyList(), CustomSerializer(customSerializer))
+                    buildSerializer(type, CustomSerializerBuilder(classLoader, this, type, customSerializer))
+                else
+                    buildSerializer(type, ClassSerializerBuilder(classLoader, this, type))
+            }
         }
     }
 

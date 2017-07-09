@@ -8,6 +8,15 @@ import java.lang.reflect.Type
 import kotlin.reflect.full.findAnnotation
 import kotlin.reflect.jvm.kotlinProperty
 
+interface FragmentSerializerFactory {
+    val baseSerializer: FragmentSerializer<Any?>
+    fun getSerializer(type: Type): FragmentSerializer<Any?>
+}
+
+interface CustomSerializerCollection {
+    fun get(type: Type, factory: FragmentSerializerFactory): FragmentSerializer<Any>?
+}
+
 class DataMember(val id: Long, val name: String, val field: Field)
 
 @Target(AnnotationTarget.FIELD, AnnotationTarget.PROPERTY)
@@ -22,18 +31,18 @@ interface DataMembersExtractor {
  */
 class PublicFieldsExtractor(val capitalizeNames: Boolean): DataMembersExtractor {
 
-    override fun getMembers(klass: Class<*>): List<DataMember> {
-        val fields = klass.fields.filter { Modifier.isPublic(it.modifiers) }
-                .filterNot { Modifier.isStatic(it.modifiers) }
-                .filterNot { Modifier.isFinal(it.modifiers) }
-        return fields.map {
-            val groboMember = it.getDeclaredAnnotation(GroboMember::class.java)
-                    ?: it.kotlinProperty?.findAnnotation<GroboMember>()
-            val id = groboMember?.id ?: 0
-            val name = groboMember?.name ?: (if (capitalizeNames) it.name.capitalize() else it.name)
-            DataMember(id, name, it)
-        }
-    }
+    override fun getMembers(klass: Class<*>) =
+            klass.fields
+                    .filter { Modifier.isPublic(it.modifiers) }
+                    .filterNot { Modifier.isStatic(it.modifiers) }
+                    .filterNot { Modifier.isFinal(it.modifiers) }
+                    .map {
+                        val groboMember = it.getDeclaredAnnotation(GroboMember::class.java)
+                                ?: it.kotlinProperty?.findAnnotation<GroboMember>()
+                        val id = groboMember?.id ?: 0
+                        val name = groboMember?.name ?: (if (capitalizeNames) it.name.capitalize() else it.name)
+                        DataMember(id, name, it)
+                    }
 }
 
 interface Serializer {
@@ -44,11 +53,12 @@ interface Serializer {
     fun <T: Any> deserialize(data: ByteArray, klass: Class<T>, vararg typeArguments: Type): T
 }
 
-open class SerializerImpl(dataMembersExtractor: DataMembersExtractor): Serializer {
+open class SerializerImpl(dataMembersExtractor: DataMembersExtractor,
+                          customSerializerCollection: CustomSerializerCollection?): Serializer {
 
-    constructor(): this(PublicFieldsExtractor(true))
+    constructor(): this(PublicFieldsExtractor(true), null)
 
-    private val collection = FragmentSerializerCollection(DynamicClassesLoader(), dataMembersExtractor)
+    private val collection = FragmentSerializerCollection(DynamicClassesLoader(), dataMembersExtractor, customSerializerCollection)
 
     override fun <T> getSize(obj: T, klass: Class<T>, vararg typeArguments: Type): Int {
         val type = if (typeArguments.isEmpty()) klass else ParameterizedTypeImpl.make(klass, typeArguments, null)

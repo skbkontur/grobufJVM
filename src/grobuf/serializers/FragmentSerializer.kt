@@ -26,8 +26,7 @@ internal val booleanArrayDataOffset = theUnsafe.arrayBaseOffset(BooleanArray::cl
 internal val floatArrayDataOffset   = theUnsafe.arrayBaseOffset(FloatArray::class.java).toLong()
 internal val doubleArrayDataOffset  = theUnsafe.arrayBaseOffset(DoubleArray::class.java).toLong()
 
-@Suppress("unused")
-internal abstract class FragmentSerializer<T>() {
+abstract class FragmentSerializer<T> {
 
     protected val unsafe = theUnsafe
 

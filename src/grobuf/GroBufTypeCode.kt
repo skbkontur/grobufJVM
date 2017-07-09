@@ -39,14 +39,13 @@ enum class GroBufTypeCode(val value: Byte, val length: Int, val erasedType: Clas
     DateTimeNew(31, 8, Date::class.java),
     //Reference(32),
     //DateTimeOffset(33),
-    Tuple(34, -1)
-    //CustomData(-1, -1)
-    ;
+    Tuple(34, -1),
+    CustomData(-1, -1);
 
     companion object {
         val lengths = IntArray(256)
         init {
-            enumValues<GroBufTypeCode>().forEach { lengths[it.value.toInt()] = it.length }
+            enumValues<GroBufTypeCode>().forEach { lengths[it.value.toInt() and 0xFF] = it.length }
         }
     }
 }
