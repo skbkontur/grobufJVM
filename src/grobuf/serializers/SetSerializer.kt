@@ -56,6 +56,7 @@ internal abstract class SetSerializer<TMap: MutableSet<Any?>> : FragmentSerializ
     }
 
     override fun initialize(serializers: Array<Any?>) {
+        @Suppress("UNCHECKED_CAST")
         elementSerializer = serializers[0] as FragmentSerializer<Any?>
     }
 

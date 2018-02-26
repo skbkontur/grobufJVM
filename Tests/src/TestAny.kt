@@ -148,6 +148,7 @@ class TestAny {
         val x = arrayOf(100.toByte(), 10_000.toShort(), 123456789, 12345678987654321, true, null,
                 Decimal.MINUS_ONE, Date(123456789), "qzz", UUID(12345678987654321, 98765432123456789))
         val data = serializer.serialize(x, Any::class.java)
+        @Suppress("UNCHECKED_CAST")
         val readX = serializer.deserialize(data, Any::class.java) as Array<Any?>
         assertEquals(x.size, readX.size)
         for (i in x.indices)
@@ -159,6 +160,7 @@ class TestAny {
         val x = mapOf(100.toByte() to 10_000.toShort(), 123456789 to 12345678987654321, true to null,
                 Decimal.MINUS_ONE to Date(123456789), "qzz" to UUID(12345678987654321, 98765432123456789))
         val data = serializer.serialize(x, Any::class.java)
+        @Suppress("UNCHECKED_CAST")
         val readX = serializer.deserialize(data, Any::class.java) as LinkedHashMap<Any?, Any?>
         assertEquals(x.size, readX.size)
         x.forEach { key, value -> assertEquals(value, readX[key]) }

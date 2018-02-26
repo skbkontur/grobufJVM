@@ -62,6 +62,7 @@ internal abstract class MapSerializer<TMap: MutableMap<Any?, Any?>> : FragmentSe
         return result
     }
 
+    @Suppress("UNCHECKED_CAST")
     override fun initialize(serializers: Array<Any?>) {
         keySerializer = serializers[0] as FragmentSerializer<Any?>
         valueSerializer = serializers[1] as FragmentSerializer<Any?>

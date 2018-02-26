@@ -16,6 +16,7 @@ fun <T> generateRandomTrash(klass: Class<T>, random: Random,
                             fillRate: Int, stringsLength: Int, arraysSize: Int): T {
     val result = theUnsafe.allocateInstance(klass)
     fillWithRandomTrash(result, random, fillRate, stringsLength, arraysSize)
+    @Suppress("UNCHECKED_CAST")
     return result as T
 }
 
@@ -72,6 +73,7 @@ private class DeepPrinter(val output: StringBuilder) {
                 }
             }
         } else {
+            @Suppress("UNCHECKED_CAST")
             obj as Array<Any?>
             obj.forEachIndexed { index, item ->
                 out("<item #$index>")
@@ -101,6 +103,7 @@ private fun fillWithRandomTrash(obj: Any, random: Random, fillRate: Int, strings
         } else {
             val elementType = type.componentType!!
             val size = random.nextInt(arraysSize) + arraysSize
+            @Suppress("UNCHECKED_CAST")
             (java.lang.reflect.Array.newInstance(elementType, size) as Array<Any?>).also {
                 for (index in 0 until size) {
                     it[index] = if (random.nextInt(101) > fillRate)

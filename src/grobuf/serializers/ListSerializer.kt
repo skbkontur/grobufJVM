@@ -56,6 +56,7 @@ internal class ListSerializer: FragmentSerializer<ArrayList<*>?>() {
     }
 
     override fun initialize(serializers: Array<Any?>) {
+        @Suppress("UNCHECKED_CAST")
         elementSerializer = serializers[0] as FragmentSerializer<Any?>
     }
 

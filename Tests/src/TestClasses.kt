@@ -117,6 +117,7 @@ class TestClasses {
     fun testGeneric2() {
         val x = G2(42, A(117, -1))
         val data = serializer.serialize(x, G2::class.java, java.lang.Integer::class.java, A::class.java)
+        @Suppress("UNCHECKED_CAST")
         val readX = serializer.deserialize(data, G2::class.java, java.lang.Integer::class.java, A::class.java) as G2<Int, A>
         assertEquals(42, readX.y1)
         assertNotNull(readX.y2)

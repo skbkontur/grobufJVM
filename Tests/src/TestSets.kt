@@ -23,6 +23,7 @@ class TestSets {
     fun testHashSet() {
         val arr = hashSetOf(A(42, 117), null, A(-1, 1000_000_000))
         val data = serializer.serialize(arr, HashSet::class.java, A::class.java)
+        @Suppress("UNCHECKED_CAST")
         val readArr = serializer.deserialize(data, HashSet::class.java, A::class.java) as HashSet<A?>
         assertEquals(arr.size, readArr.size)
         for (x in arr)
@@ -33,6 +34,7 @@ class TestSets {
     fun testWriteArrayReadHashSet() {
         val arr = arrayOf(A(42, 117), null, A(-1, 1000_000_000))
         val data = serializer.serialize(arr)
+        @Suppress("UNCHECKED_CAST")
         val readArr = serializer.deserialize(data, HashSet::class.java, A::class.java) as HashSet<A?>
         assertEquals(arr.size, readArr.size)
         for (x in arr)
@@ -43,6 +45,7 @@ class TestSets {
     fun testHashSetOfInts() {
         val arr = hashSetOf(42, null, -1)
         val data = serializer.serialize(arr, HashSet::class.java, java.lang.Integer::class.java)
+        @Suppress("UNCHECKED_CAST")
         val readArr = serializer.deserialize(data, HashSet::class.java, java.lang.Integer::class.java) as HashSet<Int?>
         assertEquals(arr.size, readArr.size)
         for (x in arr)
@@ -64,6 +67,7 @@ class TestSets {
     fun testTreeSet() {
         val arr = TreeSet(listOf(A(42, 117), A(-1, 1000_000_000)))
         val data = serializer.serialize(arr, TreeSet::class.java, A::class.java)
+        @Suppress("UNCHECKED_CAST")
         val readArr = serializer.deserialize(data, TreeSet::class.java, A::class.java) as TreeSet<A?>
         assertEquals(arr.size, readArr.size)
         for (x in arr)
@@ -74,6 +78,7 @@ class TestSets {
     fun testWriteArrayReadTreeSet() {
         val arr = arrayOf(A(42, 117), A(-1, 1000_000_000))
         val data = serializer.serialize(arr)
+        @Suppress("UNCHECKED_CAST")
         val readArr = serializer.deserialize(data, TreeSet::class.java, A::class.java) as TreeSet<A?>
         assertEquals(arr.size, readArr.size)
         for (x in arr)
@@ -84,6 +89,7 @@ class TestSets {
     fun testTreeSetOfInts() {
         val arr = TreeSet(listOf(42, -1))
         val data = serializer.serialize(arr, TreeSet::class.java, java.lang.Integer::class.java)
+        @Suppress("UNCHECKED_CAST")
         val readArr = serializer.deserialize(data, TreeSet::class.java, java.lang.Integer::class.java) as TreeSet<Int?>
         assertEquals(arr.size, readArr.size)
         for (x in arr)

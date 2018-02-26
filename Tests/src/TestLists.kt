@@ -19,6 +19,7 @@ class TestLists {
     fun testList() {
         val arr = ArrayList(listOf(A(42, 117), null, A(-1, 1000_000_000)))
         val data = serializer.serialize(arr, ArrayList::class.java, A::class.java)
+        @Suppress("UNCHECKED_CAST")
         val readArr = serializer.deserialize(data, ArrayList::class.java, A::class.java) as ArrayList<A?>
         assertEquals(arr.size, readArr.size)
         for (i in arr.indices) {
@@ -31,6 +32,7 @@ class TestLists {
     fun testWriteArrayReadList() {
         val arr = arrayOf(A(42, 117), null, A(-1, 1000_000_000))
         val data = serializer.serialize(arr)
+        @Suppress("UNCHECKED_CAST")
         val readArr = serializer.deserialize(data, ArrayList::class.java, A::class.java) as ArrayList<A?>
         assertEquals(arr.size, readArr.size)
         for (i in arr.indices) {
@@ -43,6 +45,7 @@ class TestLists {
     fun testListOfInts() {
         val arr = ArrayList(listOf(42, null, -1))
         val data = serializer.serialize(arr, ArrayList::class.java, java.lang.Integer::class.java)
+        @Suppress("UNCHECKED_CAST")
         val readArr = serializer.deserialize(data, ArrayList::class.java, java.lang.Integer::class.java) as ArrayList<Int?>
         assertEquals(arr.size, readArr.size)
         for (i in arr.indices) {
