@@ -46,7 +46,7 @@ internal sealed class JVMType {
             get() = if (klass.isArray)
                 "[${klass.componentType!!.jvmType.signature}"
             else
-                klass.canonicalName.replace('.', '/')
+                klass.name.replace('.', '/')
 
         override val signature: String
             get() = if (klass.isArray)
