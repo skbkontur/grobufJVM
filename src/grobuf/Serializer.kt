@@ -54,11 +54,12 @@ interface Serializer {
 }
 
 open class SerializerImpl(dataMembersExtractor: DataMembersExtractor,
-                          customSerializerCollection: CustomSerializerCollection?): Serializer {
+                          customSerializerCollection: CustomSerializerCollection?,
+                          parentClassLoader: ClassLoader? = null): Serializer {
 
-    constructor(): this(PublicFieldsExtractor(true), null)
+    constructor(): this(PublicFieldsExtractor(true), null, null)
 
-    private val collection = FragmentSerializerCollection(DynamicClassesLoader(), dataMembersExtractor, customSerializerCollection)
+    private val collection = FragmentSerializerCollection(DynamicClassesLoader(parentClassLoader), dataMembersExtractor, customSerializerCollection)
 
     override fun <T> getSize(obj: T, klass: Class<T>, vararg typeArguments: Type): Int {
         val type = if (typeArguments.isEmpty()) klass else ParameterizedTypeImpl.make(klass, typeArguments, null)

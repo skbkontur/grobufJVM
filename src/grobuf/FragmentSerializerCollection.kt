@@ -4,7 +4,7 @@ import grobuf.serializers.*
 import java.lang.reflect.Type
 import java.util.*
 
-internal class DynamicClassesLoader : ClassLoader() {
+internal class DynamicClassesLoader(parent: ClassLoader?) : ClassLoader(parent) {
     fun loadClass(name: String, byteCode: ByteArray): Class<*> {
         return defineClass(name, byteCode, 0, byteCode.size)
     }
